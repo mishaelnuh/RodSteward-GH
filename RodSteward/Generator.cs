@@ -10,6 +10,8 @@ namespace RodSteward
 {
     public class Generator : GH_Component
     {
+        const int CIRCLE_SIDES = 100;
+
         public Generator()
           : base("Generator", "RSGenerator",
               "Generate rod lengths and 3D printed joint meshes",
@@ -32,7 +34,8 @@ namespace RodSteward
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
         {
             pManager.AddMeshParameter("Joints", "J", "Joint meshes for structure", GH_ParamAccess.list);
-            pManager.AddMeshParameter("Rod", "R", "Rod lengths for structure", GH_ParamAccess.list);
+            pManager.AddMeshParameter("Rods", "R", "Rod meshes for structure", GH_ParamAccess.list);
+            pManager.AddCurveParameter("Rod Curves", "RC", "Rod centreline curves", GH_ParamAccess.list);
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
@@ -49,10 +52,16 @@ namespace RodSteward
             if (!DA.GetData(2, ref radius)) { return; }
             if (!DA.GetData(3, ref jointThickness)) { return; }
             if (!DA.GetData(4, ref jointLength)) { return; }
-            if (!DA.GetData(5, ref tolerance)) { return; }
+
+            try
+            { 
+                DA.GetData(5, ref tolerance);
+            }
+            catch { }
 
             if (data == null) { return; }
             if (radius <= 0 || sides < 0 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { return; }
+            if (sides == 1 || sides == 2) { return; }
 
             data.Vertices.CombineIdentical(true, true);
 
@@ -60,9 +69,10 @@ namespace RodSteward
             var vertices = data.Vertices;
 
             var offsets = GetRodOffsets(data, radius, tolerance);
-            var rods = GetRodMeshes(edges, vertices, radius, (int)Math.Floor(sides));
+            var rods = GetRodMeshes(edges, vertices, offsets, radius, (int)Math.Floor(sides));
 
-            DA.SetDataList(1, rods);
+            DA.SetDataList(1, rods.Item1);
+            DA.SetDataList(2, rods.Item2);
         }
 
         private List<Tuple<uint, uint>> GetMeshEdges(Mesh input)
@@ -93,9 +103,9 @@ namespace RodSteward
             return edges.Distinct().ToList();
         }
 
-        private Dictionary<string, double> GetRodOffsets(Mesh input, double radius, double tolerance)
+        private Dictionary<Tuple<uint, uint>, double> GetRodOffsets(Mesh input, double radius, double tolerance)
         {
-            var offsets = new Dictionary<string, double>();
+            var offsets = new Dictionary<Tuple<uint, uint>, double>();
 
             var topo = input.TopologyVertices;
             var vertices = input.Vertices;
@@ -107,8 +117,8 @@ namespace RodSteward
                 {
                     for (int vCompare = vEnd + 1; vCompare < connectedVertices.Length; vCompare++)
                     {
-                        var key1 = vStart.ToString() + " " + connectedVertices[vEnd].ToString();
-                        var key2 = vStart.ToString() + " " + connectedVertices[vCompare].ToString();
+                        var key1 = Tuple.Create((uint)vStart, (uint)connectedVertices[vEnd]);
+                        var key2 = Tuple.Create((uint)vStart, (uint)connectedVertices[vCompare]);
 
                         var vec1 = vertices[connectedVertices[vEnd]] - vertices[vStart];
                         var vec2 = vertices[connectedVertices[vCompare]] - vertices[vStart];
@@ -143,17 +153,25 @@ namespace RodSteward
             return offsets;
         }
 
-        private List<Mesh> GetRodMeshes(List<Tuple<uint, uint>> edges, Rhino.Geometry.Collections.MeshVertexList vertices, double radius = 1, int sides = 0)
+        private Tuple<List<Mesh>, List<Curve>> GetRodMeshes(List<Tuple<uint, uint>> edges, Rhino.Geometry.Collections.MeshVertexList vertices, Dictionary<Tuple<uint, uint>, double> offsets, double radius = 1, int sides = 0)
         {
-            var rods = new List<Mesh>();
+            var rodMeshes = new List<Mesh>();
+            var rodCentrelines = new List<Curve>();
 
             foreach (Tuple<uint, uint> e in edges)
             {
-                var c = new LineCurve(vertices[(int)e.Item1], vertices[(int)e.Item2]);
-                rods.Add(Mesh.CreateFromCurvePipe(c, radius, sides == 0 ? 1 : sides, 1, MeshPipeCapStyle.Box, sides > 0, null));
+                Curve c = new LineCurve(vertices[(int)e.Item1], vertices[(int)e.Item2]);
+                c = c.Trim(CurveEnd.Start, offsets[e])
+                    .Trim(CurveEnd.End, offsets[Tuple.Create(e.Item2, e.Item1)]);
+
+                if (c == null)
+                    throw new Exception("Radius and tolerance too large for edge lengths. Try reducing either or increase the edge lengths.");
+                
+                rodCentrelines.Add(c);
+                rodMeshes.Add(Mesh.CreateFromCurvePipe(c, radius, sides == 0 ? CIRCLE_SIDES : sides, 1, MeshPipeCapStyle.Flat, true, null));
             }
 
-            return rods;
+            return Tuple.Create(rodMeshes, rodCentrelines);
         }
 
         protected override System.Drawing.Bitmap Icon
