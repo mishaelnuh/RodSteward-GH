@@ -55,8 +55,8 @@ namespace RodSteward
             if (!DA.GetData(5, ref tolerance)) { return; }
 
             if (data == null) { return; }
-            if (radius <= 0 || sides < 0 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { return; }
-            if (sides == 1 || sides == 2) { return; }
+            if (radius <= 0 || sides < 0 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
+            if (sides == 1 || sides == 2) { throw new Exception("Invalid number of sides."); }
 
             data.Vertices.CombineIdentical(true, true);
 
@@ -65,8 +65,9 @@ namespace RodSteward
 
             var offsets = GetRodOffsets(data, radius, tolerance);
             var rods = GetRodMeshes(edges, vertices, offsets, radius, (int)Math.Floor(sides));
-
             var joints = GetJointMeshes(rods.Item1, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
+
+            ColourMeshCollision(rods.Item1);
 
             DA.SetDataList(0, joints.Values.ToList());
             DA.SetDataList(1, rods.Item1.Values.ToList());
@@ -195,7 +196,7 @@ namespace RodSteward
             {
                 separatedJointMeshes[v] = new List<Mesh>()
                 {
-                    Mesh.CreateQuadSphere(new Sphere(vertices[v], jointRadius), 2)
+                    //Mesh.CreateQuadSphere(new Sphere(vertices[v], jointRadius), 2)
                 };
             }
 
@@ -206,6 +207,11 @@ namespace RodSteward
 
                 Curve startCurve = c.Trim(CurveEnd.End, len - (offsets[e] + jointLength));
                 Curve endCurve = c.Trim(CurveEnd.Start, len - (offsets[Tuple.Create(e.Item2, e.Item1)] + jointLength));
+
+                //if (offsets[e] + offsets[Tuple.Create(e.Item2, e.Item1)] + 2 * jointLength > len)
+                //{
+                //    throw new Exception("Joint lengths overlapping. Try reducing joint lengths or radius.");
+                //}
 
                 Mesh startMesh = Mesh.CreateFromCurvePipe(startCurve, jointRadius, sides == 0 ? CIRCLE_SIDES : sides, 1, MeshPipeCapStyle.Flat, true, null);
                 Mesh endMesh = Mesh.CreateFromCurvePipe(endCurve, jointRadius, sides == 0 ? CIRCLE_SIDES : sides, 1, MeshPipeCapStyle.Flat, true, null);
@@ -225,6 +231,34 @@ namespace RodSteward
             }
 
             return jointMeshes;
+        }
+
+        private void ColourMeshCollision(Dictionary<Tuple<int, int>, Mesh> rodMeshes)
+        {
+            List<Tuple<int, int>> clashed = new List<Tuple<int, int>>();
+
+            var keys = rodMeshes.Keys.ToList();
+            var vals = rodMeshes.Values.ToList();
+            
+            for (int i = 0; i < rodMeshes.Values.Count; i++)
+            {
+                for (int j = i + 1; j < rodMeshes.Values.Count; j++)
+                {
+                    if (Rhino.Geometry.Intersect.Intersection.MeshMeshFast(vals[i], vals[j]).Length > 0)
+                    {
+                        clashed.Add(keys[i]);
+                        clashed.Add(keys[j]);
+                    }
+                }
+            }
+
+            foreach (var kvp in rodMeshes)
+            {
+                if (clashed.Contains(kvp.Key))
+                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(100, 255, 0, 0), kvp.Value.Vertices.Count).ToArray());
+                else
+                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(100, 255, 255, 255), kvp.Value.Vertices.Count).ToArray());
+            }
         }
 
         protected override System.Drawing.Bitmap Icon
