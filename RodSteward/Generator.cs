@@ -52,12 +52,7 @@ namespace RodSteward
             if (!DA.GetData(2, ref radius)) { return; }
             if (!DA.GetData(3, ref jointThickness)) { return; }
             if (!DA.GetData(4, ref jointLength)) { return; }
-
-            try
-            { 
-                DA.GetData(5, ref tolerance);
-            }
-            catch { }
+            if (!DA.GetData(5, ref tolerance)) { return; }
 
             if (data == null) { return; }
             if (radius <= 0 || sides < 0 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { return; }
@@ -161,8 +156,16 @@ namespace RodSteward
             foreach (Tuple<uint, uint> e in edges)
             {
                 Curve c = new LineCurve(vertices[(int)e.Item1], vertices[(int)e.Item2]);
-                c = c.Trim(CurveEnd.Start, offsets[e])
-                    .Trim(CurveEnd.End, offsets[Tuple.Create(e.Item2, e.Item1)]);
+
+                try
+                {
+                    c = c.Trim(CurveEnd.Start, offsets[e])
+                        .Trim(CurveEnd.End, offsets[Tuple.Create(e.Item2, e.Item1)]);
+                }
+                catch
+                {
+                    throw new Exception("Radius and tolerance too large for edge lengths. Try reducing either or increase the edge lengths.");
+                }
 
                 if (c == null)
                     throw new Exception("Radius and tolerance too large for edge lengths. Try reducing either or increase the edge lengths.");
