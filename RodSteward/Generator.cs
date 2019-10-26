@@ -67,7 +67,7 @@ namespace RodSteward
             var rods = GetRodMeshes(edges, vertices, offsets, radius, (int)Math.Floor(sides));
             var joints = GetJointMeshes(rods.Item1, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
 
-            ColourMeshCollision(rods.Item1);
+            ColourMeshCollision(rods.Item1, joints);
 
             DA.SetDataList(0, joints.Values.ToList());
             DA.SetDataList(1, rods.Item1.Values.ToList());
@@ -176,7 +176,7 @@ namespace RodSteward
                     throw new Exception("Radius and tolerance too large for edge lengths. Try reducing either or increase the edge lengths.");
                 
                 rodCentrelines[e] = c;
-                rodMeshes[e] = Mesh.CreateFromCurvePipe(c, radius, sides == 0 ? CIRCLE_SIDES : sides, 1, MeshPipeCapStyle.Flat, true, null);
+                rodMeshes[e] = Mesh.CreateFromCurvePipe(c, radius, sides == 0 ? CIRCLE_SIDES : sides, 10, MeshPipeCapStyle.Flat, false, null);
             }
 
             return Tuple.Create(rodMeshes, rodCentrelines);
@@ -196,7 +196,7 @@ namespace RodSteward
             {
                 separatedJointMeshes[v] = new List<Mesh>()
                 {
-                    //Mesh.CreateQuadSphere(new Sphere(vertices[v], jointRadius), 2)
+                    Mesh.CreateQuadSphere(new Sphere(vertices[v], jointRadius), 1)
                 };
             }
 
@@ -208,13 +208,13 @@ namespace RodSteward
                 Curve startCurve = c.Trim(CurveEnd.End, len - (offsets[e] + jointLength));
                 Curve endCurve = c.Trim(CurveEnd.Start, len - (offsets[Tuple.Create(e.Item2, e.Item1)] + jointLength));
 
-                //if (offsets[e] + offsets[Tuple.Create(e.Item2, e.Item1)] + 2 * jointLength > len)
-                //{
-                //    throw new Exception("Joint lengths overlapping. Try reducing joint lengths or radius.");
-                //}
+                if (startCurve == null || endCurve == null)
+                {
+                    throw new Exception("Joint lengths greater than rod length. Try reducing joint lengths or radius.");
+                }
 
-                Mesh startMesh = Mesh.CreateFromCurvePipe(startCurve, jointRadius, sides == 0 ? CIRCLE_SIDES : sides, 1, MeshPipeCapStyle.Flat, true, null);
-                Mesh endMesh = Mesh.CreateFromCurvePipe(endCurve, jointRadius, sides == 0 ? CIRCLE_SIDES : sides, 1, MeshPipeCapStyle.Flat, true, null);
+                Mesh startMesh = Mesh.CreateFromCurvePipe(startCurve, jointRadius, sides == 0 ? CIRCLE_SIDES : sides, 10, MeshPipeCapStyle.Flat, false, null);
+                Mesh endMesh = Mesh.CreateFromCurvePipe(endCurve, jointRadius, sides == 0 ? CIRCLE_SIDES : sides, 10, MeshPipeCapStyle.Flat, false, null);
                 separatedJointMeshes[e.Item1].Add(startMesh);
                 separatedJointMeshes[e.Item2].Add(endMesh);
 
@@ -233,31 +233,66 @@ namespace RodSteward
             return jointMeshes;
         }
 
-        private void ColourMeshCollision(Dictionary<Tuple<int, int>, Mesh> rodMeshes)
+        private void ColourMeshCollision(Dictionary<Tuple<int, int>, Mesh> rodMeshes, Dictionary<int, Mesh> jointMeshes)
         {
-            List<Tuple<int, int>> clashed = new List<Tuple<int, int>>();
+            List<Tuple<int, int>> clashedRods = new List<Tuple<int, int>>();
+            List<int> clashedJoints = new List<int>();
 
-            var keys = rodMeshes.Keys.ToList();
-            var vals = rodMeshes.Values.ToList();
-            
-            for (int i = 0; i < rodMeshes.Values.Count; i++)
+            var rodKeys = rodMeshes.Keys.ToList();
+            var rodVals = rodMeshes.Values.ToList();
+            var jointKeys = jointMeshes.Keys.ToList();
+            var jointVals = jointMeshes.Values.ToList();
+
+            for (int i = 0; i < rodKeys.Count; i++)
             {
-                for (int j = i + 1; j < rodMeshes.Values.Count; j++)
+                for (int j = i + 1; j < rodKeys.Count; j++)
                 {
-                    if (Rhino.Geometry.Intersect.Intersection.MeshMeshFast(vals[i], vals[j]).Length > 0)
+                    if (Rhino.Geometry.Intersect.Intersection.MeshMeshFast(rodVals[i], rodVals[j]).Length > 0)
                     {
-                        clashed.Add(keys[i]);
-                        clashed.Add(keys[j]);
+                        clashedRods.Add(rodKeys[i]);
+                        clashedRods.Add(rodKeys[j]);
+                    }
+                }
+
+                for (int j = 0; j < jointKeys.Count; j++)
+                {
+                    if (rodKeys[i].Item1 == jointKeys[j] || rodKeys[i].Item2 == jointKeys[j])
+                        continue;
+
+                    if (Rhino.Geometry.Intersect.Intersection.MeshMeshFast(rodVals[i], jointVals[j]).Length > 0)
+                    {
+                        clashedRods.Add(rodKeys[i]);
+                        clashedJoints.Add(jointKeys[j]);
+                    }
+                }
+            }
+
+            for (int i = 0; i < jointKeys.Count; i++)
+            {
+                for (int j = i + 1; j < jointKeys.Count; j++)
+                {
+                    if (Rhino.Geometry.Intersect.Intersection.MeshMeshFast(jointVals[i], jointVals[j]).Length > 0)
+                    {
+                        clashedJoints.Add(jointKeys[i]);
+                        clashedJoints.Add(jointKeys[j]);
                     }
                 }
             }
 
             foreach (var kvp in rodMeshes)
             {
-                if (clashed.Contains(kvp.Key))
-                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(100, 255, 0, 0), kvp.Value.Vertices.Count).ToArray());
+                if (clashedRods.Contains(kvp.Key))
+                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(150, 255, 0, 0), kvp.Value.Vertices.Count).ToArray());
                 else
                     kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(100, 255, 255, 255), kvp.Value.Vertices.Count).ToArray());
+            }
+
+            foreach (var kvp in jointMeshes)
+            {
+                if (clashedJoints.Contains(kvp.Key))
+                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(150, 255, 0, 0), kvp.Value.Vertices.Count).ToArray());
+                else
+                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(200, 40, 40, 40), kvp.Value.Vertices.Count).ToArray());
             }
         }
 
