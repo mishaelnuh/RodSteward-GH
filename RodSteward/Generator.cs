@@ -47,6 +47,8 @@ namespace RodSteward
 
             int sidesFloored = (int)Math.Floor(sides);
 
+            data.Vertices.CombineIdentical(true, true);
+
             var edges = GetMeshEdges(data);
             var vertices = data.Vertices;
 
@@ -73,12 +75,13 @@ namespace RodSteward
 
                     if (vIdx[i] < vIdx[nextId])
                         edges.Add(new Tuple<uint, uint>(vIdx[i], vIdx[nextId]));
-                    else if (vIdx[i] > vIdx[0])
-                        edges.Add(new Tuple<uint, uint>(vIdx[i], vIdx[nextId]));
+                    else if (vIdx[i] > vIdx[nextId])
+                        edges.Add(new Tuple<uint, uint>(vIdx[nextId], vIdx[i]));
                     else
                         continue;
                 }
             }
+            
             return edges.Distinct().ToList();
         }
 
