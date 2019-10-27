@@ -205,8 +205,8 @@ namespace RodSteward
                 Curve c = new LineCurve(vertices[e.Item1], vertices[e.Item2]);
                 double len = c.GetLength();
 
-                Curve startCurve = c.Trim(CurveEnd.End, len - (offsets[e] + jointLength));
-                Curve endCurve = c.Trim(CurveEnd.Start, len - (offsets[Tuple.Create(e.Item2, e.Item1)] + jointLength));
+                Curve startCurve = c.Trim(CurveEnd.End, len - (offsets[e] + jointLength + tolerance));
+                Curve endCurve = c.Trim(CurveEnd.Start, len - (offsets[Tuple.Create(e.Item2, e.Item1)] + jointLength + tolerance));
 
                 if (startCurve == null || endCurve == null)
                 {
@@ -222,7 +222,7 @@ namespace RodSteward
                 //separatedJointMeshes[e.Item2].AddRange(Mesh.CreateBooleanDifference(new Mesh[] { endMesh }, new Mesh[] { rodMeshes[e] }));
             }
 
-            foreach(KeyValuePair<int, List<Mesh>> kvp in separatedJointMeshes)
+            foreach (KeyValuePair<int, List<Mesh>> kvp in separatedJointMeshes)
             {
                 var meshes = Mesh.CreateBooleanUnion(kvp.Value);
                 //meshes = Mesh.CreateBooleanDifference(meshes,
