@@ -300,7 +300,7 @@ namespace RodSteward
         {
             get
             {
-                return null;
+                return Properties.Resources.generator;
             }
         }
     }
