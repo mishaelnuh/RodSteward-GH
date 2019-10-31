@@ -11,6 +11,11 @@ namespace RodSteward
     public class Generator : GH_Component
     {
         const int CIRCLE_SIDES = 100;
+        private Dictionary<Tuple<int, int>, Brep> rodBreps = new Dictionary<Tuple<int, int>, Brep>();
+        private Dictionary<Tuple<int, int>, Curve> rodCentrelines = new Dictionary<Tuple<int, int>, Curve>();
+        private Dictionary<int, Brep> jointBreps = new Dictionary<int, Brep>();
+        private List<Tuple<int, int>> clashedRods = new List<Tuple<int, int>>();
+        private List<int> clashedJoints = new List<int>();
 
         public Generator()
           : base("Generator", "RSGenerator",
@@ -36,6 +41,26 @@ namespace RodSteward
             pManager.AddBrepParameter("Joints", "J", "Joint meshes for structure", GH_ParamAccess.list);
             pManager.AddBrepParameter("Rods", "R", "Rod meshes for structure", GH_ParamAccess.list);
             pManager.AddCurveParameter("Rod Curves", "RC", "Rod centreline curves", GH_ParamAccess.list);
+
+            ((IGH_PreviewObject)pManager[0]).Hidden = true;
+            ((IGH_PreviewObject)pManager[1]).Hidden = true;
+            ((IGH_PreviewObject)pManager[2]).Hidden = true;
+        }
+        public override void DrawViewportMeshes(IGH_PreviewArgs args)
+        {
+            var errorMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Red, 0.3);
+            var rodMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.White, 0.3);
+            var jointMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.DarkGray, 0.3);
+
+            foreach (var kvp in rodBreps)
+            {
+                args.Display.DrawBrepShaded(kvp.Value, clashedRods.Contains(kvp.Key) ? errorMaterial : rodMaterial);
+            }
+
+            foreach (var kvp in jointBreps)
+            {
+                args.Display.DrawBrepShaded(kvp.Value, clashedJoints.Contains(kvp.Key) ? errorMaterial : jointMaterial);
+            }
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
@@ -66,13 +91,19 @@ namespace RodSteward
             var offsets = GetRodOffsets(data, radius, tolerance);
 
             var rods = GetRodBreps(edges, vertices, offsets, radius, (int)Math.Floor(sides));
-            var joints = GetJointBreps(rods.Item1, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
+            rodBreps = rods.Item1;
+            rodCentrelines = rods.Item2;
 
-            //ColourMeshCollision(rods.Item1, joints);
+            jointBreps = GetJointBreps(rodBreps, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
 
-            DA.SetDataList(0, joints.Values.ToList());
-            DA.SetDataList(1, rods.Item1.Values.ToList());
-            DA.SetDataList(2, rods.Item2.Values.ToList());
+
+            var collisions = FindBrepCollision(rodBreps, jointBreps);
+            clashedRods = collisions.Item1;
+            clashedJoints = collisions.Item2;
+
+            DA.SetDataList(0, jointBreps.Values.ToList());
+            DA.SetDataList(1, rodBreps.Values.ToList());
+            DA.SetDataList(2, rodCentrelines.Values.ToList());
         }
 
         private List<Tuple<int, int>> GetMeshEdges(Mesh input)
@@ -178,15 +209,15 @@ namespace RodSteward
                         .Trim(CurveEnd.End, offsets[Tuple.Create(e.Item2, e.Item1)]);
                     c = c.Trim(CurveEnd.Start, offsets[e])
                         .Trim(CurveEnd.End, offsets[Tuple.Create(e.Item2, e.Item1)]);
+                    if (c == null || centreline == null)
+                        throw new Exception();
                 }
                 catch
                 {
-                    throw new Exception("Radius and tolerance too large for edge lengths. Try reducing either or increase the edge lengths.");
+                    this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Rod not created. Radius and tolerance too large for edge lengths. Try reducing either or increase the edge lengths.");
+                    continue;
                 }
 
-                if (c == null)
-                    throw new Exception("Radius and tolerance too large for edge lengths. Try reducing either or increase the edge lengths.");
-                
                 rodCentrelines[e] = centreline;
 
                 var profile = GetProfile(radius, sides, vector);
@@ -215,18 +246,36 @@ namespace RodSteward
 
             foreach(Tuple<int, int> e in edges)
             {
+                if (!rodBreps.ContainsKey(e))
+                    continue;
+                
                 var vector = Point3d.Subtract(vertices[e.Item2], vertices[e.Item1]);
                 Curve c = new LineCurve(new Point3d(0, 0, 0), Point3d.Add(new Point3d(0, 0, 0), vector));
                 vector.Unitize();
 
                 double len = c.GetLength();
 
-                Curve startCurve = c.Trim(CurveEnd.End, len - (offsets[e] + jointLength + tolerance));
-                Curve endCurve = c.Trim(CurveEnd.Start, len - (offsets[Tuple.Create(e.Item2, e.Item1)] + jointLength + tolerance));
-
-                if (startCurve == null || endCurve == null)
+                if (len == 0)
                 {
-                    throw new Exception("Joint lengths greater than rod length. Try reducing joint lengths or radius.");
+                    this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Joint not created. Joint lengths greater than rod length. Try reducing joint lengths or radius.");
+                    continue;
+                }
+
+                Curve startCurve;
+                Curve endCurve;
+
+                try
+                {
+                    startCurve = c.Trim(CurveEnd.End, len - (offsets[e] + jointLength + tolerance));
+                    endCurve = c.Trim(CurveEnd.Start, len - (offsets[Tuple.Create(e.Item2, e.Item1)] + jointLength + tolerance));
+
+                    if (startCurve == null || endCurve == null)
+                        throw new Exception();
+                }
+                catch
+                {
+                    this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Joint not created. Joint lengths greater than rod length. Try reducing joint lengths or radius.");
+                    continue;
                 }
 
                 var profile = GetProfile(jointRadius, sides, vector);
@@ -250,26 +299,32 @@ namespace RodSteward
                 {
                     jointBreps[kvp.Key] = Brep.CreateBooleanUnion(kvp.Value, DocumentTolerance()).First();
                 }
-                catch { }
+                catch
+                {
+                    this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
+                }
             }
             return jointBreps;
         }
 
-        private void ColourMeshCollision(Dictionary<Tuple<int, int>, Mesh> rodMeshes, Dictionary<int, Mesh> jointMeshes)
+        private Tuple<List<Tuple<int,int>>, List<int>> FindBrepCollision(Dictionary<Tuple<int, int>, Brep> rodBreps, Dictionary<int, Brep> jointBreps)
         {
-            List<Tuple<int, int>> clashedRods = new List<Tuple<int, int>>();
-            List<int> clashedJoints = new List<int>();
+            var clashedRods = new List<Tuple<int, int>>();
+            var clashedJoints = new List<int>();
 
-            var rodKeys = rodMeshes.Keys.ToList();
-            var rodVals = rodMeshes.Values.ToList();
-            var jointKeys = jointMeshes.Keys.ToList();
-            var jointVals = jointMeshes.Values.ToList();
+            var rodKeys = rodBreps.Keys.ToList();
+            var rodVals = rodBreps.Values.ToList();
+            var jointKeys = jointBreps.Keys.ToList();
+            var jointVals = jointBreps.Values.ToList();
 
             for (int i = 0; i < rodKeys.Count; i++)
             {
                 for (int j = i + 1; j < rodKeys.Count; j++)
                 {
-                    if (Rhino.Geometry.Intersect.Intersection.MeshMeshFast(rodVals[i], rodVals[j]).Length > 0)
+                    Curve[] intCurve;
+                    Point3d[] intPoints;
+                    Rhino.Geometry.Intersect.Intersection.BrepBrep(rodVals[i], rodVals[j], DocumentTolerance(), out intCurve, out intPoints);
+                    if (intCurve.Length > 0 || intPoints.Length > 0)
                     {
                         clashedRods.Add(rodKeys[i]);
                         clashedRods.Add(rodKeys[j]);
@@ -281,7 +336,10 @@ namespace RodSteward
                     if (rodKeys[i].Item1 == jointKeys[j] || rodKeys[i].Item2 == jointKeys[j])
                         continue;
 
-                    if (Rhino.Geometry.Intersect.Intersection.MeshMeshFast(rodVals[i], jointVals[j]).Length > 0)
+                    Curve[] intCurve;
+                    Point3d[] intPoints;
+                    Rhino.Geometry.Intersect.Intersection.BrepBrep(rodVals[i], jointVals[j], DocumentTolerance(), out intCurve, out intPoints);
+                    if (intCurve.Length > 0 || intPoints.Length > 0)
                     {
                         clashedRods.Add(rodKeys[i]);
                         clashedJoints.Add(jointKeys[j]);
@@ -293,7 +351,10 @@ namespace RodSteward
             {
                 for (int j = i + 1; j < jointKeys.Count; j++)
                 {
-                    if (Rhino.Geometry.Intersect.Intersection.MeshMeshFast(jointVals[i], jointVals[j]).Length > 0)
+                    Curve[] intCurve;
+                    Point3d[] intPoints;
+                    Rhino.Geometry.Intersect.Intersection.BrepBrep(jointVals[i], jointVals[j], DocumentTolerance(), out intCurve, out intPoints);
+                    if (intCurve.Length > 0 || intPoints.Length > 0)
                     {
                         clashedJoints.Add(jointKeys[i]);
                         clashedJoints.Add(jointKeys[j]);
@@ -301,21 +362,7 @@ namespace RodSteward
                 }
             }
 
-            foreach (var kvp in rodMeshes)
-            {
-                if (clashedRods.Contains(kvp.Key))
-                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(150, 255, 0, 0), kvp.Value.Vertices.Count).ToArray());
-                else
-                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(100, 255, 255, 255), kvp.Value.Vertices.Count).ToArray());
-            }
-
-            foreach (var kvp in jointMeshes)
-            {
-                if (clashedJoints.Contains(kvp.Key))
-                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(150, 255, 0, 0), kvp.Value.Vertices.Count).ToArray());
-                else
-                    kvp.Value.VertexColors.SetColors(Enumerable.Repeat(System.Drawing.Color.FromArgb(200, 40, 40, 40), kvp.Value.Vertices.Count).ToArray());
-            }
+            return Tuple.Create(clashedRods, clashedJoints);
         }
 
         protected override System.Drawing.Bitmap Icon
