@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Grasshopper.Kernel;
+using Grasshopper.GUI;
+using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using MIConvexHull;
 
@@ -12,9 +14,11 @@ namespace RodSteward
     public class Generator : GH_Component
     {
         const int CIRCLE_SIDES = 100;
+        public bool FastRender { get; set; } = true;
+
         private Dictionary<Tuple<int, int>, Brep> rodBreps = new Dictionary<Tuple<int, int>, Brep>();
         private Dictionary<Tuple<int, int>, Curve> rodCentrelines = new Dictionary<Tuple<int, int>, Curve>();
-        private Dictionary<int, Brep> jointBreps = new Dictionary<int, Brep>();
+        private Dictionary<int, List<Brep>> jointBreps = new Dictionary<int, List<Brep>>();
         private List<Tuple<int, int>> clashedRods = new List<Tuple<int, int>>();
         private List<int> clashedJoints = new List<int>();
 
@@ -23,6 +27,10 @@ namespace RodSteward
               "Generate rod lengths and 3D printed joint meshes",
               "RodSteward", "RodSteward")
         {
+        }
+        public override void CreateAttributes()
+        {
+            m_attributes = new GeneratorAttribute(this);
         }
 
         public override Guid ComponentGuid => new Guid("0ab517a3-7f77-4c94-b004-2a8ab75cc685");
@@ -47,6 +55,7 @@ namespace RodSteward
             ((IGH_PreviewObject)pManager[1]).Hidden = true;
             ((IGH_PreviewObject)pManager[2]).Hidden = true;
         }
+
         public override void DrawViewportMeshes(IGH_PreviewArgs args)
         {
             var errorMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Red, 0.3);
@@ -60,7 +69,8 @@ namespace RodSteward
 
             foreach (var kvp in jointBreps)
             {
-                args.Display.DrawBrepShaded(kvp.Value, clashedJoints.Contains(kvp.Key) ? errorMaterial : jointMaterial);
+                foreach(var b in kvp.Value)
+                    args.Display.DrawBrepShaded(b, clashedJoints.Contains(kvp.Key) ? errorMaterial : jointMaterial);
             }
         }
 
@@ -97,12 +107,11 @@ namespace RodSteward
 
             jointBreps = GetJointBreps(rodBreps, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
 
-
             var collisions = FindBrepCollision(rodBreps, jointBreps);
             clashedRods = collisions.Item1;
             clashedJoints = collisions.Item2;
 
-            DA.SetDataList(0, jointBreps.Values.ToList());
+            DA.SetDataList(0, jointBreps.Values.SelectMany(j => j).ToList());
             DA.SetDataList(1, rodBreps.Values.ToList());
             DA.SetDataList(2, rodCentrelines.Values.ToList());
         }
@@ -166,7 +175,6 @@ namespace RodSteward
                         }
                         catch
                         {
-                            offset = tolerance * 2;
                         }
 
                         if (offsets.ContainsKey(key1))
@@ -231,11 +239,11 @@ namespace RodSteward
             return Tuple.Create(rodBreps, rodCentrelines);
         }
 
-        private Dictionary<int, Brep> GetJointBreps(Dictionary<Tuple<int, int>, Brep> rodBreps, List<Tuple<int, int>> edges,
+        private Dictionary<int, List<Brep>> GetJointBreps(Dictionary<Tuple<int, int>, Brep> rodBreps, List<Tuple<int, int>> edges,
             Rhino.Geometry.Collections.MeshVertexList vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides,
             double jointLength, double jointThickness, double tolerance)
         {
-            var jointBreps = new Dictionary<int, Brep>();
+            var jointBreps = new Dictionary<int, List<Brep>>();
             var separateJointBreps = new Dictionary<int, List<Brep>>();
 
             var jointCorePoints = new Dictionary<int, List<double[]>>();
@@ -294,8 +302,8 @@ namespace RodSteward
                 endBrep = endBrep.CapPlanarHoles(DocumentTolerance());
                 endBrep.Translate(vertices[e.Item2].X - vector.X * endLength, vertices[e.Item2].Y - vector.Y * endLength, vertices[e.Item2].Z - vector.Z * endLength);
 
-                separateJointBreps[e.Item1].AddRange(Brep.CreateBooleanDifference(startBrep, rodBreps[e], DocumentTolerance()));
-                separateJointBreps[e.Item2].AddRange(Brep.CreateBooleanDifference(endBrep, rodBreps[e], DocumentTolerance()));
+                separateJointBreps[e.Item1].Add(startBrep);
+                separateJointBreps[e.Item2].Add(endBrep);
 
                 Polyline corePoly;
                 profile.TryGetPolyline(out corePoly);
@@ -308,33 +316,45 @@ namespace RodSteward
 
             foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
             {
-                var convHullRes = ConvexHull.Create(kvp.Value, DocumentTolerance());
-                var hullPoints = convHullRes.Result.Points.ToList();
-                var hullFaces = convHullRes.Result.Faces.ToList();
-
-                var newMesh = new Mesh();
-                newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0], p.Position[1], p.Position[2])));
-                newMesh.Faces.AddFaces(hullFaces.Select(f => new MeshFace(hullPoints.IndexOf(f.Vertices[0]), hullPoints.IndexOf(f.Vertices[1]), hullPoints.IndexOf(f.Vertices[2]))));
-                newMesh.Normals.ComputeNormals();
-                newMesh.Compact();
-                separateJointBreps[kvp.Key].Add(Brep.CreateFromMesh(newMesh, true));
-            }
-
-            foreach (KeyValuePair<int, List<Brep>> kvp in separateJointBreps)
-            {
                 try
                 {
-                    jointBreps[kvp.Key] = Brep.CreateBooleanUnion(kvp.Value, DocumentTolerance()).First();
+                    var convHullRes = ConvexHull.Create(kvp.Value, DocumentTolerance());
+                    var hullPoints = convHullRes.Result.Points.ToList();
+                    var hullFaces = convHullRes.Result.Faces.ToList();
+
+                    var newMesh = new Mesh();
+                    newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0], p.Position[1], p.Position[2])));
+                    newMesh.Faces.AddFaces(hullFaces.Select(f => new MeshFace(hullPoints.IndexOf(f.Vertices[0]), hullPoints.IndexOf(f.Vertices[1]), hullPoints.IndexOf(f.Vertices[2]))));
+                    newMesh.Normals.ComputeNormals();
+                    newMesh.Compact();
+                    separateJointBreps[kvp.Key].Add(Brep.CreateFromMesh(newMesh, true));
                 }
-                catch
+                catch { }
+            }
+
+            if (FastRender)
+            {
+                jointBreps = separateJointBreps;
+            }
+            else
+            {
+                foreach (KeyValuePair<int, List<Brep>> kvp in separateJointBreps)
                 {
-                    this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
+                    try
+                    {
+                        jointBreps[kvp.Key] = Brep.CreateBooleanUnion(kvp.Value, DocumentTolerance()).ToList();
+                        jointBreps[kvp.Key] = Brep.CreateBooleanDifference(jointBreps[kvp.Key], rodBreps.Where(r => r.Key.Item1 == kvp.Key || r.Key.Item2 == kvp.Key).Select(r => r.Value), DocumentTolerance()).ToList();
+                    }
+                    catch
+                    {
+                        this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
+                    }
                 }
             }
             return jointBreps;
         }
 
-        private Tuple<List<Tuple<int,int>>, List<int>> FindBrepCollision(Dictionary<Tuple<int, int>, Brep> rodBreps, Dictionary<int, Brep> jointBreps)
+        private Tuple<List<Tuple<int,int>>, List<int>> FindBrepCollision(Dictionary<Tuple<int, int>, Brep> rodBreps, Dictionary<int, List<Brep>> jointBreps)
         {
             var clashedRods = new List<Tuple<int, int>>();
             var clashedJoints = new List<int>();
@@ -363,28 +383,46 @@ namespace RodSteward
                     if (rodKeys[i].Item1 == jointKeys[j] || rodKeys[i].Item2 == jointKeys[j])
                         continue;
 
-                    Curve[] intCurve;
-                    Point3d[] intPoints;
-                    Rhino.Geometry.Intersect.Intersection.BrepBrep(rodVals[i], jointVals[j], DocumentTolerance(), out intCurve, out intPoints);
-                    if (intCurve.Length > 0 || intPoints.Length > 0)
+                    foreach (var jv in jointVals[j])
                     {
-                        clashedRods.Add(rodKeys[i]);
-                        clashedJoints.Add(jointKeys[j]);
+                        Curve[] intCurve;
+                        Point3d[] intPoints;
+                        Rhino.Geometry.Intersect.Intersection.BrepBrep(rodVals[i], jv, DocumentTolerance(), out intCurve, out intPoints);
+                        if (intCurve.Length > 0 || intPoints.Length > 0)
+                        {
+                            clashedRods.Add(rodKeys[i]);
+                            clashedJoints.Add(jointKeys[j]);
+                            break;
+                        }
                     }
                 }
             }
 
+            var hit = false;
             for (int i = 0; i < jointKeys.Count; i++)
             {
                 for (int j = i + 1; j < jointKeys.Count; j++)
                 {
-                    Curve[] intCurve;
-                    Point3d[] intPoints;
-                    Rhino.Geometry.Intersect.Intersection.BrepBrep(jointVals[i], jointVals[j], DocumentTolerance(), out intCurve, out intPoints);
-                    if (intCurve.Length > 0 || intPoints.Length > 0)
+                    foreach (var iv in jointVals[i])
                     {
-                        clashedJoints.Add(jointKeys[i]);
-                        clashedJoints.Add(jointKeys[j]);
+                        foreach (var jv in jointVals[j])
+                        {
+                            Curve[] intCurve;
+                            Point3d[] intPoints;
+                            Rhino.Geometry.Intersect.Intersection.BrepBrep(iv, jv, DocumentTolerance(), out intCurve, out intPoints);
+                            if (intCurve.Length > 0 || intPoints.Length > 0)
+                            {
+                                clashedJoints.Add(jointKeys[i]);
+                                clashedJoints.Add(jointKeys[j]);
+                                hit = true;
+                                break;
+                            }
+                        }
+                        if (hit)
+                        {
+                            hit = false;
+                            break;
+                        }
                     }
                 }
             }
@@ -398,6 +436,80 @@ namespace RodSteward
             {
                 return Properties.Resources.generator;
             }
+        }
+    }
+
+    public class GeneratorAttribute : Grasshopper.Kernel.Attributes.GH_ComponentAttributes
+    {
+        public GeneratorAttribute(GH_Component owner) : base(owner) { }
+
+        protected override void Layout()
+        {
+            base.Layout();
+
+            System.Drawing.Rectangle rec0 = GH_Convert.ToRectangle(Bounds);
+            rec0.Height += 22 * 2;
+
+            System.Drawing.Rectangle rec1 = rec0;
+            rec1.Y = rec1.Bottom - 22 * 2;
+            rec1.Height = 22;
+            rec1.Inflate(-2, -2);
+
+            System.Drawing.Rectangle rec2 = rec0;
+            rec2.Y = rec2.Bottom - 22;
+            rec2.Height = 22;
+            rec2.Inflate(-2, -2);
+
+            Bounds = rec0;
+            ButtonBounds1 = rec1;
+            ButtonBounds2 = rec2;
+        }
+        private System.Drawing.Rectangle ButtonBounds1 { get; set; }
+        private System.Drawing.Rectangle ButtonBounds2 { get; set; }
+
+        protected override void Render(GH_Canvas canvas, System.Drawing.Graphics graphics, GH_CanvasChannel channel)
+        {
+            base.Render(canvas, graphics, channel);
+
+            if (channel == GH_CanvasChannel.Objects)
+            {
+                var component = Owner as Generator;
+                GH_Capsule button1 = GH_Capsule.CreateTextCapsule(ButtonBounds1, ButtonBounds1, component.FastRender ? GH_Palette.Black : GH_Palette.Grey, "Fast Render", 2, 0);
+                GH_Capsule button2 = GH_Capsule.CreateTextCapsule(ButtonBounds2, ButtonBounds2, !component.FastRender ? GH_Palette.Black : GH_Palette.Grey, "Full Render", 2, 0);
+                button1.Render(graphics, Selected, Owner.Locked, false);
+                button1.Dispose();
+                button2.Render(graphics, Selected, Owner.Locked, false);
+                button2.Dispose();
+            }
+        }
+        public override GH_ObjectResponse RespondToMouseDown(GH_Canvas sender, GH_CanvasMouseEvent e)
+        {
+            if (e.Button == System.Windows.Forms.MouseButtons.Left)
+            {
+                System.Drawing.RectangleF rec1 = ButtonBounds1;
+                System.Drawing.RectangleF rec2 = ButtonBounds2;
+                if (rec1.Contains(e.CanvasLocation))
+                {
+                    var component = Owner as Generator;
+                    if (component.FastRender != true)
+                    {
+                        component.FastRender = true;
+                        component.ExpireSolution(true);
+                    }
+                    return GH_ObjectResponse.Handled;
+                }
+                else if (rec2.Contains(e.CanvasLocation))
+                {
+                    var component = Owner as Generator;
+                    if (component.FastRender != false)
+                    {
+                        component.FastRender = false;
+                        component.ExpireSolution(true);
+                    }
+                    return GH_ObjectResponse.Handled;
+                }
+            }
+            return base.RespondToMouseDown(sender, e);
         }
     }
 }
