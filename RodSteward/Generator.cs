@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
+using MIConvexHull;
 
 namespace RodSteward
 {
@@ -222,8 +223,8 @@ namespace RodSteward
 
                 var profile = GetProfile(radius, sides, vector);
 
-                rodBreps[e] = Brep.CreateFromSweep(c, profile, true, 0.1).First();
-                rodBreps[e] = rodBreps[e].CapPlanarHoles(0.1);
+                rodBreps[e] = Brep.CreateFromSweep(c, profile, true, DocumentTolerance()).First();
+                rodBreps[e] = rodBreps[e].CapPlanarHoles(DocumentTolerance());
                 rodBreps[e].Translate(vertices[e.Item1].X + vector.X * offsets[e], vertices[e.Item1].Y + vector.Y * offsets[e], vertices[e.Item1].Z + vector.Z * offsets[e]);
             }
 
@@ -236,12 +237,15 @@ namespace RodSteward
         {
             var jointBreps = new Dictionary<int, Brep>();
             var separateJointBreps = new Dictionary<int, List<Brep>>();
+
+            var jointCorePoints = new Dictionary<int, List<double[]>>();
             
             double jointRadius = radius + jointThickness + tolerance;
 
             for (int v = 0; v < vertices.Count; v++)
             {
                 separateJointBreps[v] = new List<Brep>();
+                jointCorePoints[v] = new List<double[]>();
             }
 
             foreach(Tuple<int, int> e in edges)
@@ -280,17 +284,40 @@ namespace RodSteward
 
                 var profile = GetProfile(jointRadius, sides, vector);
 
-                Brep startBrep = Brep.CreateFromSweep(startCurve, profile, true, 0.1).First();
-                startBrep = startBrep.CapPlanarHoles(0.1);
+                Brep startBrep = Brep.CreateFromSweep(startCurve, profile, true, DocumentTolerance()).First();
+                startBrep = startBrep.CapPlanarHoles(DocumentTolerance());
                 startBrep.Translate(vertices[e.Item1].X, vertices[e.Item1].Y, vertices[e.Item1].Z);
 
-                Brep endBrep = Brep.CreateFromSweep(endCurve, profile, true, 0.1).First();
+
+                Brep endBrep = Brep.CreateFromSweep(endCurve, profile, true, DocumentTolerance()).First();
                 var endLength = endCurve.GetLength();
-                endBrep = endBrep.CapPlanarHoles(0.1);
+                endBrep = endBrep.CapPlanarHoles(DocumentTolerance());
                 endBrep.Translate(vertices[e.Item2].X - vector.X * endLength, vertices[e.Item2].Y - vector.Y * endLength, vertices[e.Item2].Z - vector.Z * endLength);
 
-                separateJointBreps[e.Item1].AddRange(Brep.CreateBooleanDifference(startBrep, rodBreps[e], 0.1));
-                separateJointBreps[e.Item2].AddRange(Brep.CreateBooleanDifference(endBrep, rodBreps[e], 0.1));
+                separateJointBreps[e.Item1].AddRange(Brep.CreateBooleanDifference(startBrep, rodBreps[e], DocumentTolerance()));
+                separateJointBreps[e.Item2].AddRange(Brep.CreateBooleanDifference(endBrep, rodBreps[e], DocumentTolerance()));
+
+                Polyline corePoly;
+                profile.TryGetPolyline(out corePoly);
+                foreach (var l in corePoly)
+                {
+                    jointCorePoints[e.Item1].Add(new double[] { l.X + vertices[e.Item1].X, l.Y + vertices[e.Item1].Y, l.Z + vertices[e.Item1].Z });
+                    jointCorePoints[e.Item2].Add(new double[] { l.X + vertices[e.Item2].X, l.Y + vertices[e.Item2].Y, l.Z + vertices[e.Item2].Z });
+                }
+            }
+
+            foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
+            {
+                var convHullRes = ConvexHull.Create(kvp.Value, DocumentTolerance());
+                var hullPoints = convHullRes.Result.Points.ToList();
+                var hullFaces = convHullRes.Result.Faces.ToList();
+
+                var newMesh = new Mesh();
+                newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0], p.Position[1], p.Position[2])));
+                newMesh.Faces.AddFaces(hullFaces.Select(f => new MeshFace(hullPoints.IndexOf(f.Vertices[0]), hullPoints.IndexOf(f.Vertices[1]), hullPoints.IndexOf(f.Vertices[2]))));
+                newMesh.Normals.ComputeNormals();
+                newMesh.Compact();
+                separateJointBreps[kvp.Key].Add(Brep.CreateFromMesh(newMesh, true));
             }
 
             foreach (KeyValuePair<int, List<Brep>> kvp in separateJointBreps)
