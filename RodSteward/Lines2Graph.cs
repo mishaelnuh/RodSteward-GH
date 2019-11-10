@@ -69,8 +69,44 @@ namespace RodSteward
                 edges.Add(Tuple.Create(match1, match2));
             }
 
-            DA.SetDataList(0, edges.Distinct().ToList());
+            // Prune
+            List<List<Tuple<int, int>>> filteredEdges = new List<List<Tuple<int, int>>>();
+
+            var visitedEdges = new List<Tuple<int, int>>();
+            var startingIndex = 0;
+
+            while (visitedEdges.Count < edges.Count)
+            {
+                filteredEdges.Add(ConnectedEdges(edges.Distinct().ToList(), vertices, startingIndex));
+                visitedEdges.AddRange(filteredEdges[filteredEdges.Count - 1]);
+                try
+                {
+                    startingIndex = edges.First(e => !visitedEdges.Contains(e)).Item1;
+                }
+                catch { break; }
+            }
+
+            DA.SetDataList(0, filteredEdges.OrderByDescending(i => i.Count).First().Distinct().ToList());
             DA.SetDataList(1, vertices);
+        }
+
+        private List<Tuple<int, int>> ConnectedEdges(List<Tuple<int,int>> edges, List<Point3d> vertices, int vIndex, List<Tuple<int,int>> searchedEdges = null)
+        {
+            if (searchedEdges == null)
+                searchedEdges = new List<Tuple<int, int>>();
+
+            var connectedEdges = edges.Where(v => v.Item1 == vIndex || v.Item2 == vIndex).ToList();
+
+            foreach(var c in connectedEdges)
+            {
+                if (!searchedEdges.Contains(c))
+                {
+                    searchedEdges.Add(c);
+                    ConnectedEdges(edges, vertices, c.Item1 == vIndex ? c.Item2 : c.Item1, searchedEdges);
+                }
+            }
+
+            return searchedEdges;
         }
 
         private List<Tuple<int, int>> GetMeshEdges(Mesh input)
