@@ -11,20 +11,21 @@ using MIConvexHull;
 
 namespace RodSteward
 {
-    public class Mesh2Graph : GH_Component
+    public class Lines2Graph : GH_Component
     {
-        public Mesh2Graph()
-          : base("Mesh2Graph", "RSMesh2Graph",
-              "Converts mesh to list of edges and vertices",
+        public Lines2Graph()
+          : base("Lines2Graph", "RSLines2Graph",
+              "Converts lines to list of edges and vertices",
               "RodSteward", "RodSteward")
         {
         }
 
-        public override Guid ComponentGuid => new Guid("63ef7f07-25a6-4422-b161-df67ad5f72b8");
+        public override Guid ComponentGuid => new Guid("9fe58242-b9b0-4a7b-b97f-8013ebea0ab6");
 
         protected override void RegisterInputParams(GH_InputParamManager pManager)
         {
-            pManager.AddMeshParameter("Mesh", "M", "Base mesh for structure", GH_ParamAccess.item);
+            pManager.AddLineParameter("Lines", "L", "Lines for structure", GH_ParamAccess.list);
+            pManager.AddNumberParameter("Tolerance", "e", "Tolerance for merging points", GH_ParamAccess.item);
         }
 
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -35,18 +36,40 @@ namespace RodSteward
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            Mesh data = null;
-            
-            if (!DA.GetData(0, ref data)) { return; }
+            List<Line> data = new List<Line>();
+            double tolerance = 0;
+
+            if (!DA.GetDataList(0, data)) { return; }
+            if (!DA.GetData(1, ref tolerance)) { return; }
 
             if (data == null) { return; }
 
-            data.Vertices.CombineIdentical(true, true);
+            List<Point3d> vertices = new List<Point3d>();
+            List<Tuple<int, int>> edges = new List<Tuple<int, int>>();
 
-            var edges = GetMeshEdges(data);
-            var vertices = data.Vertices;
+            foreach (var l in data)
+            {
+                var p1 = l.PointAt(0);
+                var p2 = l.PointAt(1);
 
-            DA.SetDataList(0, edges);
+                int match1 = vertices.FindIndex(p => p.DistanceTo(p1) < tolerance);
+                int match2 = vertices.FindIndex(p => p.DistanceTo(p2) < tolerance);
+
+                if (match1 < 0)
+                {
+                    vertices.Add(p1);
+                    match1 = vertices.Count() - 1;
+                }
+                if (match2 < 0)
+                {
+                    vertices.Add(p2);
+                    match2 = vertices.Count() - 1;
+                }
+
+                edges.Add(Tuple.Create(match1, match2));
+            }
+
+            DA.SetDataList(0, edges.Distinct().ToList());
             DA.SetDataList(1, vertices);
         }
 

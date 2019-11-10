@@ -60,8 +60,8 @@ namespace RodSteward
         public override void DrawViewportMeshes(IGH_PreviewArgs args)
         {
             var errorMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Red, 0.3);
-            var rodMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.White, 0.3);
-            var jointMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.DarkGray, 0.3);
+            var rodMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.BurlyWood, 0.1);
+            var jointMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Black, 0.1);
 
             foreach (var kvp in rodBreps)
             {
@@ -123,38 +123,50 @@ namespace RodSteward
                 var connectedVertices = edges.Where(e => e.Item1 == vStart).Select(e => e.Item2).ToList();
                 connectedVertices.AddRange(edges.Where(e => e.Item2 == vStart).Select(e => e.Item1).ToList());
 
-                for (int vEnd = 0; vEnd < connectedVertices.Count; vEnd++)
+                if (connectedVertices.Count == 1)
                 {
-                    for (int vCompare = vEnd + 1; vCompare < connectedVertices.Count; vCompare++)
+                    var key = Tuple.Create(vStart, connectedVertices[0]);
+
+                    if (offsets.ContainsKey(key))
+                        offsets[key] = Math.Max(radius/2, offsets[key]);
+                    else
+                        offsets[key] = radius/2;
+                }
+                else
+                {
+                    for (int vEnd = 0; vEnd < connectedVertices.Count; vEnd++)
                     {
-                        var key1 = Tuple.Create(vStart, connectedVertices[vEnd]);
-                        var key2 = Tuple.Create(vStart, connectedVertices[vCompare]);
-
-                        var vec1 = vertices[connectedVertices[vEnd]] - vertices[vStart];
-                        var vec2 = vertices[connectedVertices[vCompare]] - vertices[vStart];
-                        vec1.Unitize();
-                        vec2.Unitize();
-
-                        var angle = Math.Acos(vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z);
-
-                        double offset = 0;
-                        try
+                        for (int vCompare = vEnd + 1; vCompare < connectedVertices.Count; vCompare++)
                         {
-                            offset = (radius + tolerance) / Math.Tan(angle / 2);
-                        }
-                        catch
-                        {
-                        }
+                            var key1 = Tuple.Create(vStart, connectedVertices[vEnd]);
+                            var key2 = Tuple.Create(vStart, connectedVertices[vCompare]);
 
-                        if (offsets.ContainsKey(key1))
-                            offsets[key1] = Math.Max(offset, offsets[key1]);
-                        else
-                            offsets[key1] = offset;
+                            var vec1 = vertices[connectedVertices[vEnd]] - vertices[vStart];
+                            var vec2 = vertices[connectedVertices[vCompare]] - vertices[vStart];
+                            vec1.Unitize();
+                            vec2.Unitize();
 
-                        if (offsets.ContainsKey(key2))
-                            offsets[key2] = Math.Max(offset, offsets[key2]);
-                        else
-                            offsets[key2] = offset;
+                            var angle = Math.Acos(vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z);
+
+                            double offset = radius / 2;
+                            try
+                            {
+                                offset = Math.Max((radius + tolerance) / Math.Tan(angle / 2), radius/2);
+                            }
+                            catch
+                            {
+                            }
+
+                            if (offsets.ContainsKey(key1))
+                                offsets[key1] = Math.Max(offset, offsets[key1]);
+                            else
+                                offsets[key1] = offset;
+
+                            if (offsets.ContainsKey(key2))
+                                offsets[key2] = Math.Max(offset, offsets[key2]);
+                            else
+                                offsets[key2] = offset;
+                        }
                     }
                 }
             }
@@ -183,10 +195,19 @@ namespace RodSteward
                 Curve centreline = new LineCurve(vertices[e.Item1], vertices[e.Item2]);
                 try
                 {
-                    centreline = centreline.Trim(CurveEnd.Start, offsets[e])
-                        .Trim(CurveEnd.End, offsets[Tuple.Create(e.Item2, e.Item1)]);
-                    c = c.Trim(CurveEnd.Start, offsets[e])
-                        .Trim(CurveEnd.End, offsets[Tuple.Create(e.Item2, e.Item1)]);
+                    var o1 = offsets[e];
+                    var o2 = offsets[Tuple.Create(e.Item2, e.Item1)];
+                    if (o1 > 0)
+                    { 
+                        centreline = centreline.Trim(CurveEnd.Start, o1);
+                        c = c.Trim(CurveEnd.Start, o1);
+                    }
+                    if (o2 > 0)
+                    {
+                        centreline = centreline.Trim(CurveEnd.End, o2);
+                        c = c.Trim(CurveEnd.End, o2);
+                    }
+
                     if (c == null || centreline == null)
                         throw new Exception();
                 }
