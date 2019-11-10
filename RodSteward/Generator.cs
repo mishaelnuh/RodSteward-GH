@@ -37,7 +37,8 @@ namespace RodSteward
 
         protected override void RegisterInputParams(GH_InputParamManager pManager)
         {
-            pManager.AddMeshParameter("Mesh", "M", "Base mesh for structure", GH_ParamAccess.item);
+            pManager.AddGenericParameter("Edges", "E", "Connectivity", GH_ParamAccess.list);
+            pManager.AddPointParameter("Vertices", "V", "Rod meshes for structure", GH_ParamAccess.list);
             pManager.AddNumberParameter("Sides", "S", "Number of faces for rods", GH_ParamAccess.item);
             pManager.AddNumberParameter("Radius", "R", "Radius of rods", GH_ParamAccess.item);
             pManager.AddNumberParameter("Joint Thickness", "JT", "Thickness of Joint", GH_ParamAccess.item);
@@ -76,30 +77,27 @@ namespace RodSteward
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            Mesh data = null;
+            List<Tuple<int, int>> edges = new List<Tuple<int, int>>();
+            List<Point3d> vertices = new List<Point3d>();
             double sides = 0;
             double radius = 0;
             double jointThickness = 0;
             double jointLength = 0;
             double tolerance = 0;
             
-            if (!DA.GetData(0, ref data)) { return; }
-            if (!DA.GetData(1, ref sides)) { return; }
-            if (!DA.GetData(2, ref radius)) { return; }
-            if (!DA.GetData(3, ref jointThickness)) { return; }
-            if (!DA.GetData(4, ref jointLength)) { return; }
-            if (!DA.GetData(5, ref tolerance)) { return; }
+            if (!DA.GetDataList(0, edges)) { return; }
+            if (!DA.GetDataList(1, vertices)) { return; }
+            if (!DA.GetData(2, ref sides)) { return; }
+            if (!DA.GetData(3, ref radius)) { return; }
+            if (!DA.GetData(4, ref jointThickness)) { return; }
+            if (!DA.GetData(5, ref jointLength)) { return; }
+            if (!DA.GetData(6, ref tolerance)) { return; }
 
-            if (data == null) { return; }
+            if (edges == null || vertices == null) { return; }
             if (radius <= 0 || sides < 0 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
             if (sides == 1 || sides == 2) { throw new Exception("Invalid number of sides."); }
 
-            data.Vertices.CombineIdentical(true, true);
-
-            var edges = GetMeshEdges(data);
-            var vertices = data.Vertices;
-
-            var offsets = GetRodOffsets(data, radius, tolerance);
+            var offsets = GetRodOffsets(edges, vertices, radius, tolerance);
 
             var rods = GetRodBreps(edges, vertices, offsets, radius, (int)Math.Floor(sides));
             rodBreps = rods.Item1;
@@ -116,47 +114,18 @@ namespace RodSteward
             DA.SetDataList(2, rodCentrelines.Values.ToList());
         }
 
-        private List<Tuple<int, int>> GetMeshEdges(Mesh input)
-        {
-            var ngons = input.GetNgonAndFacesEnumerable();
-
-            var edges = new List<Tuple<int, int>>();
-
-            foreach (MeshNgon n in ngons)
-            {
-                var vIdx = n.BoundaryVertexIndexList();
-
-                if (vIdx.Length < 3) { continue; }
-
-                for (int i = 0; i < vIdx.Length; i++)
-                {
-                    var nextId = i == vIdx.Length - 1 ? 0 : i + 1;
-
-                    if (vIdx[i] < vIdx[nextId])
-                        edges.Add(Tuple.Create((int)vIdx[i], (int)vIdx[nextId]));
-                    else if (vIdx[i] > vIdx[nextId])
-                        edges.Add(Tuple.Create((int)vIdx[nextId], (int)vIdx[i]));
-                    else
-                        continue;
-                }
-            }
-            
-            return edges.Distinct().ToList();
-        }
-
-        private Dictionary<Tuple<int, int>, double> GetRodOffsets(Mesh input, double radius, double tolerance)
+        private Dictionary<Tuple<int, int>, double> GetRodOffsets(List<Tuple<int, int>> edges, List<Point3d> vertices, double radius, double tolerance)
         {
             var offsets = new Dictionary<Tuple<int, int>, double>();
-
-            var topo = input.TopologyVertices;
-            var vertices = input.Vertices;
-
+            
             for (int vStart = 0; vStart < vertices.Count; vStart++)
             {
-                var connectedVertices = topo.ConnectedTopologyVertices(vStart);
-                for (int vEnd = 0; vEnd < connectedVertices.Length; vEnd++)
+                var connectedVertices = edges.Where(e => e.Item1 == vStart).Select(e => e.Item2).ToList();
+                connectedVertices.AddRange(edges.Where(e => e.Item2 == vStart).Select(e => e.Item1).ToList());
+
+                for (int vEnd = 0; vEnd < connectedVertices.Count; vEnd++)
                 {
-                    for (int vCompare = vEnd + 1; vCompare < connectedVertices.Length; vCompare++)
+                    for (int vCompare = vEnd + 1; vCompare < connectedVertices.Count; vCompare++)
                     {
                         var key1 = Tuple.Create(vStart, connectedVertices[vEnd]);
                         var key2 = Tuple.Create(vStart, connectedVertices[vCompare]);
@@ -200,7 +169,7 @@ namespace RodSteward
             return Polyline.CreateInscribedPolygon(circle, sides).ToPolylineCurve();
         }
         private Tuple<Dictionary<Tuple<int, int>, Brep>, Dictionary<Tuple<int, int>, Curve>> GetRodBreps(List<Tuple<int, int>> edges,
-            Rhino.Geometry.Collections.MeshVertexList vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides)
+            List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides)
         {
             var rodBreps = new Dictionary<Tuple<int, int>, Brep>();
             var rodCentrelines = new Dictionary<Tuple<int, int>, Curve>();
@@ -240,7 +209,7 @@ namespace RodSteward
         }
 
         private Dictionary<int, List<Brep>> GetJointBreps(Dictionary<Tuple<int, int>, Brep> rodBreps, List<Tuple<int, int>> edges,
-            Rhino.Geometry.Collections.MeshVertexList vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides,
+            List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides,
             double jointLength, double jointThickness, double tolerance)
         {
             var jointBreps = new Dictionary<int, List<Brep>>();
