@@ -9,6 +9,8 @@ using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using MIConvexHull;
 using g3;
+using CarveRC;
+using System.Reflection;
 
 namespace RodSteward
 {
@@ -104,7 +106,7 @@ namespace RodSteward
             rodMeshes = rods.Item1;
             rodCentrelines = rods.Item2;
 
-            jointMeshes = GetJointMeshes(rodMeshes, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
+            var xxx = GetJointMeshes(rodMeshes, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
 
             //var collisions = FindBrepCollision(rodBreps, jointBreps);
             //clashedRods = collisions.Item1;
@@ -114,7 +116,7 @@ namespace RodSteward
             //DA.SetDataList(1, rodBreps.Values.ToList());
             //DA.SetDataList(2, rodCentrelines.Values.ToList());
 
-            DA.SetDataList(0, jointMeshes.Values.SelectMany(j => j.Select(x => G3ToMesh(x))).ToList());
+            DA.SetDataList(0, xxx.Values.SelectMany(j => j).ToList());
             DA.SetDataList(1, rodMeshes.Values.Select(r => G3ToMesh(r)).ToList());
         }
 
@@ -187,6 +189,9 @@ namespace RodSteward
 
         private DMesh3 MeshToG3(Mesh source)
         {
+            source.Compact();
+            source.Vertices.CombineIdentical(true, true);
+
             var vertices = source.Vertices;
             var faces = source.Faces;
             var normals = source.Normals;
@@ -217,6 +222,7 @@ namespace RodSteward
             mesh.Faces.AddFaces(source.Triangles().Select(t => new MeshFace(t.a, t.b, t.c)));
             mesh.Normals.ComputeNormals();
             mesh.Compact();
+            mesh.Vertices.CombineIdentical(true, true);
             return mesh;
         }
         private Tuple<Dictionary<Tuple<int, int>, DMesh3>, Dictionary<Tuple<int, int>, Curve>> GetRodMeshes(List<Tuple<int, int>> edges,
@@ -258,12 +264,12 @@ namespace RodSteward
             return Tuple.Create(rodMeshes, rodCentrelines);
         }
 
-        private Dictionary<int, List<DMesh3>> GetJointMeshes(Dictionary<Tuple<int, int>, DMesh3> rodMeshes, List<Tuple<int, int>> edges,
+        private Dictionary<int, List<Mesh>> GetJointMeshes(Dictionary<Tuple<int, int>, DMesh3> rodMeshes, List<Tuple<int, int>> edges,
             List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides,
             double jointLength, double jointThickness, double tolerance)
         {
-            var jointMeshes = new Dictionary<int, List<DMesh3>>();
-            var separateJointMeshes = new Dictionary<int, List<DMesh3>>();
+            var jointMeshes = new Dictionary<int, List<Mesh>>();
+            var separateJointMeshes = new Dictionary<int, List<Mesh>>();
 
             var jointCorePoints = new Dictionary<int, List<double[]>>();
             
@@ -271,7 +277,7 @@ namespace RodSteward
 
             for (int v = 0; v < vertices.Count; v++)
             {
-                separateJointMeshes[v] = new List<DMesh3>();
+                separateJointMeshes[v] = new List<Mesh>();
                 jointCorePoints[v] = new List<double[]>();
             }
 
@@ -307,8 +313,8 @@ namespace RodSteward
                     continue;
                 }
 
-                DMesh3 startMesh = MeshToG3(Mesh.CreateFromCurvePipe(startCurve, jointRadius, sides, 0, MeshPipeCapStyle.Flat, false));
-                DMesh3 endMesh = MeshToG3(Mesh.CreateFromCurvePipe(endCurve, jointRadius, sides, 0, MeshPipeCapStyle.Flat, false));
+                Mesh startMesh = Mesh.CreateFromCurvePipe(startCurve, jointRadius, sides, 0, MeshPipeCapStyle.Flat, false);
+                Mesh endMesh = Mesh.CreateFromCurvePipe(endCurve, jointRadius, sides, 0, MeshPipeCapStyle.Flat, false);
 
                 separateJointMeshes[e.Item1].Add(startMesh);
                 separateJointMeshes[e.Item2].Add(endMesh);
@@ -327,23 +333,23 @@ namespace RodSteward
                 }
             }
 
-            foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
-            {
-                try
-                {
-                    var convHullRes = ConvexHull.Create(kvp.Value, DocumentTolerance());
-                    var hullPoints = convHullRes.Result.Points.ToList();
-                    var hullFaces = convHullRes.Result.Faces.ToList();
+            //foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
+            //{
+            //    try
+            //    {
+            //        var convHullRes = ConvexHull.Create(kvp.Value, DocumentTolerance());
+            //        var hullPoints = convHullRes.Result.Points.ToList();
+            //        var hullFaces = convHullRes.Result.Faces.ToList();
 
-                    var newMesh = new Mesh();
-                    newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0], p.Position[1], p.Position[2])));
-                    newMesh.Faces.AddFaces(hullFaces.Select(f => new MeshFace(hullPoints.IndexOf(f.Vertices[0]), hullPoints.IndexOf(f.Vertices[1]), hullPoints.IndexOf(f.Vertices[2]))));
-                    newMesh.Normals.ComputeNormals();
-                    newMesh.Compact();
-                    separateJointMeshes[kvp.Key].Add(MeshToG3(newMesh));
-                }
-                catch { }
-            }
+            //        var newMesh = new Mesh();
+            //        newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0], p.Position[1], p.Position[2])));
+            //        newMesh.Faces.AddFaces(hullFaces.Select(f => new MeshFace(hullPoints.IndexOf(f.Vertices[0]), hullPoints.IndexOf(f.Vertices[1]), hullPoints.IndexOf(f.Vertices[2]))));
+            //        newMesh.Normals.ComputeNormals();
+            //        newMesh.Compact();
+            //        separateJointMeshes[kvp.Key].Add(MeshToG3(newMesh));
+            //    }
+            //    catch { }
+            //}
 
             if (FastRender)
             {
@@ -351,19 +357,23 @@ namespace RodSteward
             }
             else
             {
-                //foreach (KeyValuePair<int, List<DMesh3>> kvp in separateJointMeshes)
-                //{
-                //    try
-                //    {
-                //        jointMeshes[kvp.Key] = kvp.Value.Select(m => m.)
-                //        jointBreps[kvp.Key] = Brep.CreateBooleanUnion(kvp.Value, DocumentTolerance()).ToList();
-                //        jointBreps[kvp.Key] = Brep.CreateBooleanDifference(jointBreps[kvp.Key], rodBreps.Where(r => r.Key.Item1 == kvp.Key || r.Key.Item2 == kvp.Key).Select(r => r.Value), DocumentTolerance()).ToList();
-                //    }
-                //    catch
-                //    {
-                //        this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
-                //    }
-                //}
+                foreach (KeyValuePair<int, List<Mesh>> kvp in separateJointMeshes)
+                {
+                    try
+                    {
+                        var resMesh = kvp.Value.First();
+                        for (int i = 1; i < kvp.Value.Count(); i++)
+                            resMesh = CarveOps.PerformCSG(resMesh, kvp.Value[i], Operations.Union);
+
+                        jointMeshes[kvp.Key] = new List<Mesh>() { resMesh };
+                        //jointBreps[kvp.Key] = Brep.CreateBooleanUnion(kvp.Value, DocumentTolerance()).ToList();
+                        //jointBreps[kvp.Key] = Brep.CreateBooleanDifference(jointBreps[kvp.Key], rodBreps.Where(r => r.Key.Item1 == kvp.Key || r.Key.Item2 == kvp.Key).Select(r => r.Value), DocumentTolerance()).ToList();
+                    }
+                    catch
+                    {
+                        this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
+                    }
+                }
             }
             return jointMeshes;
         }
