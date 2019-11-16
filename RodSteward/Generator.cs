@@ -8,6 +8,7 @@ using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using MIConvexHull;
+using g3;
 
 namespace RodSteward
 {
@@ -49,7 +50,7 @@ namespace RodSteward
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
         {
             pManager.AddBrepParameter("Joints", "J", "Joint meshes for structure", GH_ParamAccess.list);
-            pManager.AddBrepParameter("Rods", "R", "Rod meshes for structure", GH_ParamAccess.list);
+            pManager.AddMeshParameter("Rods", "R", "Rod meshes for structure", GH_ParamAccess.list);
             pManager.AddCurveParameter("Rod Curves", "RC", "Rod centreline curves", GH_ParamAccess.list);
 
             ((IGH_PreviewObject)pManager[0]).Hidden = true;
@@ -57,23 +58,23 @@ namespace RodSteward
             ((IGH_PreviewObject)pManager[2]).Hidden = true;
         }
 
-        public override void DrawViewportMeshes(IGH_PreviewArgs args)
-        {
-            var errorMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Red, 0.3);
-            var rodMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.BurlyWood, 0.1);
-            var jointMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Black, 0.1);
+        //public override void DrawViewportMeshes(IGH_PreviewArgs args)
+        //{
+        //    var errorMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Red, 0.3);
+        //    var rodMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.BurlyWood, 0.1);
+        //    var jointMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Black, 0.1);
 
-            foreach (var kvp in rodBreps)
-            {
-                args.Display.DrawBrepShaded(kvp.Value, clashedRods.Contains(kvp.Key) ? errorMaterial : rodMaterial);
-            }
+        //    foreach (var kvp in rodBreps)
+        //    {
+        //        args.Display.DrawBrepShaded(kvp.Value, clashedRods.Contains(kvp.Key) ? errorMaterial : rodMaterial);
+        //    }
 
-            foreach (var kvp in jointBreps)
-            {
-                foreach(var b in kvp.Value)
-                    args.Display.DrawBrepShaded(b, clashedJoints.Contains(kvp.Key) ? errorMaterial : jointMaterial);
-            }
-        }
+        //    foreach (var kvp in jointBreps)
+        //    {
+        //        foreach(var b in kvp.Value)
+        //            args.Display.DrawBrepShaded(b, clashedJoints.Contains(kvp.Key) ? errorMaterial : jointMaterial);
+        //    }
+        //}
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
@@ -100,18 +101,20 @@ namespace RodSteward
             var offsets = GetRodOffsets(edges, vertices, radius, tolerance);
 
             var rods = GetRodBreps(edges, vertices, offsets, radius, (int)Math.Floor(sides));
-            rodBreps = rods.Item1;
-            rodCentrelines = rods.Item2;
+            //rodBreps = rods.Item1;
+            //rodCentrelines = rods.Item2;
 
-            jointBreps = GetJointBreps(rodBreps, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
+            //jointBreps = GetJointBreps(rodBreps, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
 
-            var collisions = FindBrepCollision(rodBreps, jointBreps);
-            clashedRods = collisions.Item1;
-            clashedJoints = collisions.Item2;
+            //var collisions = FindBrepCollision(rodBreps, jointBreps);
+            //clashedRods = collisions.Item1;
+            //clashedJoints = collisions.Item2;
 
-            DA.SetDataList(0, jointBreps.Values.SelectMany(j => j).ToList());
-            DA.SetDataList(1, rodBreps.Values.ToList());
-            DA.SetDataList(2, rodCentrelines.Values.ToList());
+            //DA.SetDataList(0, jointBreps.Values.SelectMany(j => j).ToList());
+            //DA.SetDataList(1, rodBreps.Values.ToList());
+            //DA.SetDataList(2, rodCentrelines.Values.ToList());
+            
+            DA.SetDataList(1, rods.Item1.Values.Select(r => G3ToMesh(r)).ToList());
         }
 
         private Dictionary<Tuple<int, int>, double> GetRodOffsets(List<Tuple<int, int>> edges, List<Point3d> vertices, double radius, double tolerance)
@@ -174,24 +177,53 @@ namespace RodSteward
             return offsets;
         }
 
-        private Curve GetProfile(double radius, int sides, Vector3d normal)
+        private Curve GetProfile(double radius, int sides, Rhino.Geometry.Vector3d normal)
         {
             var profilePlane = new Plane(new Point3d(0, 0, 0), normal);
             var circle = new Circle(profilePlane, radius);
             return Polyline.CreateInscribedPolygon(circle, sides).ToPolylineCurve();
         }
-        private Tuple<Dictionary<Tuple<int, int>, Brep>, Dictionary<Tuple<int, int>, Curve>> GetRodBreps(List<Tuple<int, int>> edges,
+
+        private DMesh3 MeshToG3(Mesh source)
+        {
+            var vertices = source.Vertices;
+            var faces = source.Faces;
+            var normals = source.Normals;
+
+            List<g3.Vector3d> flatV = vertices.Select(v => new g3.Vector3d(v.X, v.Y, v.Z)).ToList();
+
+            List<int> flatF = faces.SelectMany(f =>
+            {
+                if (f.IsTriangle)
+                    return new List<int>() { f.A, f.B, f.C };
+                else if (f.IsQuad)
+                    return new List<int>() { f.A, f.B, f.C, f.A, f.C, f.D };
+                else
+                    return new List<int>() { };
+            }).ToList();
+
+            List<g3.Vector3d> flatN = normals.Select(n => new g3.Vector3d(n.X, n.Y, n.Z)).ToList();
+
+            var mesh = DMesh3Builder.Build(flatV, flatF, flatN);
+            //mesh.CheckValidity(false, FailMode.Throw);
+            return mesh;
+        }
+
+        private Mesh G3ToMesh(DMesh3 source)
+        {
+            var mesh = new Mesh();
+            mesh.Vertices.AddVertices(source.Vertices().Select(v => new Point3d(v.x, v.y, v.z)));
+            mesh.Faces.AddFaces(source.Triangles().Select(t => new MeshFace(t.a, t.b, t.c)));
+            return mesh;
+        }
+        private Tuple<Dictionary<Tuple<int, int>, DMesh3>, Dictionary<Tuple<int, int>, Curve>> GetRodBreps(List<Tuple<int, int>> edges,
             List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides)
         {
-            var rodBreps = new Dictionary<Tuple<int, int>, Brep>();
+            var rodMeshes = new Dictionary<Tuple<int, int>, DMesh3>();
             var rodCentrelines = new Dictionary<Tuple<int, int>, Curve>();
 
             foreach (Tuple<int, int> e in edges)
             {
-                var vector = Point3d.Subtract(vertices[e.Item2], vertices[e.Item1]);
-                Curve c = new LineCurve(new Point3d(0, 0, 0), Point3d.Add(new Point3d(0, 0, 0), vector));
-                vector.Unitize();
-
                 Curve centreline = new LineCurve(vertices[e.Item1], vertices[e.Item2]);
                 try
                 {
@@ -200,15 +232,13 @@ namespace RodSteward
                     if (o1 > 0)
                     { 
                         centreline = centreline.Trim(CurveEnd.Start, o1);
-                        c = c.Trim(CurveEnd.Start, o1);
                     }
                     if (o2 > 0)
                     {
                         centreline = centreline.Trim(CurveEnd.End, o2);
-                        c = c.Trim(CurveEnd.End, o2);
                     }
 
-                    if (c == null || centreline == null)
+                    if (centreline == null)
                         throw new Exception();
                 }
                 catch
@@ -219,14 +249,10 @@ namespace RodSteward
 
                 rodCentrelines[e] = centreline;
 
-                var profile = GetProfile(radius, sides, vector);
-
-                rodBreps[e] = Brep.CreateFromSweep(c, profile, true, DocumentTolerance()).First();
-                rodBreps[e] = rodBreps[e].CapPlanarHoles(DocumentTolerance());
-                rodBreps[e].Translate(vertices[e.Item1].X + vector.X * offsets[e], vertices[e.Item1].Y + vector.Y * offsets[e], vertices[e.Item1].Z + vector.Z * offsets[e]);
+                rodMeshes[e] = MeshToG3(Mesh.CreateFromCurvePipe(centreline, radius, sides, 0, MeshPipeCapStyle.Flat, false));
             }
 
-            return Tuple.Create(rodBreps, rodCentrelines);
+            return Tuple.Create(rodMeshes, rodCentrelines);
         }
 
         private Dictionary<int, List<Brep>> GetJointBreps(Dictionary<Tuple<int, int>, Brep> rodBreps, List<Tuple<int, int>> edges,
