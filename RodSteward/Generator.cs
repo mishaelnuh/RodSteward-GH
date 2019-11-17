@@ -8,9 +8,7 @@ using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using MIConvexHull;
-using g3;
 using CarveRC;
-using System.Reflection;
 
 namespace RodSteward
 {
@@ -19,9 +17,9 @@ namespace RodSteward
         const int CIRCLE_SIDES = 100;
         public bool FastRender { get; set; } = true;
 
-        private Dictionary<Tuple<int, int>, DMesh3> rodMeshes = new Dictionary<Tuple<int, int>, DMesh3>();
+        private Dictionary<Tuple<int, int>, Mesh> rodMeshes = new Dictionary<Tuple<int, int>, Mesh>();
         private Dictionary<Tuple<int, int>, Curve> rodCentrelines = new Dictionary<Tuple<int, int>, Curve>();
-        private Dictionary<int, List<DMesh3>> jointMeshes = new Dictionary<int, List<DMesh3>>();
+        private Dictionary<int, List<Mesh>> jointMeshes = new Dictionary<int, List<Mesh>>();
         private List<Tuple<int, int>> clashedRods = new List<Tuple<int, int>>();
         private List<int> clashedJoints = new List<int>();
 
@@ -60,23 +58,23 @@ namespace RodSteward
             ((IGH_PreviewObject)pManager[2]).Hidden = true;
         }
 
-        //public override void DrawViewportMeshes(IGH_PreviewArgs args)
-        //{
-        //    var errorMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Red, 0.3);
-        //    var rodMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.BurlyWood, 0.1);
-        //    var jointMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Black, 0.1);
+        public override void DrawViewportMeshes(IGH_PreviewArgs args)
+        {
+            var errorMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Red, 0.3);
+            var rodMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.BurlyWood, 0.3);
+            var jointMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Black, 0.3);
 
-        //    foreach (var kvp in rodBreps)
-        //    {
-        //        args.Display.DrawBrepShaded(kvp.Value, clashedRods.Contains(kvp.Key) ? errorMaterial : rodMaterial);
-        //    }
+            foreach (var kvp in rodMeshes)
+            {
+                args.Display.DrawMeshShaded(kvp.Value, clashedRods.Contains(kvp.Key) ? errorMaterial : rodMaterial);
+            }
 
-        //    foreach (var kvp in jointBreps)
-        //    {
-        //        foreach(var b in kvp.Value)
-        //            args.Display.DrawBrepShaded(b, clashedJoints.Contains(kvp.Key) ? errorMaterial : jointMaterial);
-        //    }
-        //}
+            foreach (var kvp in jointMeshes)
+            {
+                foreach (var b in kvp.Value)
+                    args.Display.DrawMeshShaded(b, clashedJoints.Contains(kvp.Key) ? errorMaterial : jointMaterial);
+            }
+        }
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
@@ -100,30 +98,29 @@ namespace RodSteward
             if (radius <= 0 || sides < 0 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
             if (sides == 1 || sides == 2) { throw new Exception("Invalid number of sides."); }
 
-            var offsets = GetRodOffsets(edges, vertices, radius, tolerance);
+            var offsets = GetRodOffsets(edges, vertices, jointThickness, radius, tolerance);
 
             var rods = GetRodMeshes(edges, vertices, offsets, radius, (int)Math.Floor(sides));
             rodMeshes = rods.Item1;
             rodCentrelines = rods.Item2;
 
-            var xxx = GetJointMeshes(rodMeshes, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
+            jointMeshes = GetJointMeshes(rodMeshes, edges, vertices, offsets, radius, (int)Math.Floor(sides), jointLength, jointThickness, tolerance);
 
-            //var collisions = FindBrepCollision(rodBreps, jointBreps);
-            //clashedRods = collisions.Item1;
-            //clashedJoints = collisions.Item2;
+            var collisions = FindMeshCollision(rodMeshes, jointMeshes);
+            clashedRods = collisions.Item1;
+            clashedJoints = collisions.Item2;
 
-            //DA.SetDataList(0, jointBreps.Values.SelectMany(j => j).ToList());
-            //DA.SetDataList(1, rodBreps.Values.ToList());
-            //DA.SetDataList(2, rodCentrelines.Values.ToList());
-
-            DA.SetDataList(0, xxx.Values.SelectMany(j => j).ToList());
-            DA.SetDataList(1, rodMeshes.Values.Select(r => G3ToMesh(r)).ToList());
+            DA.SetDataList(0, jointMeshes.Values.SelectMany(j => j).ToList());
+            DA.SetDataList(1, rodMeshes.Values.ToList());
+            DA.SetDataList(2, rodCentrelines.Values.ToList());
         }
 
-        private Dictionary<Tuple<int, int>, double> GetRodOffsets(List<Tuple<int, int>> edges, List<Point3d> vertices, double radius, double tolerance)
+        private Dictionary<Tuple<int, int>, double> GetRodOffsets(List<Tuple<int, int>> edges, List<Point3d> vertices, double jointThickness, double radius, double tolerance)
         {
             var offsets = new Dictionary<Tuple<int, int>, double>();
-            
+
+            var jointRadius = radius + jointThickness + tolerance * 4; // add extra tolerance
+
             for (int vStart = 0; vStart < vertices.Count; vStart++)
             {
                 var connectedVertices = edges.Where(e => e.Item1 == vStart).Select(e => e.Item2).ToList();
@@ -153,11 +150,13 @@ namespace RodSteward
                             vec2.Unitize();
 
                             var angle = Math.Acos(vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z);
-
-                            double offset = radius / 2;
+                            double offset = radius/2;
                             try
                             {
-                                offset = Math.Max((radius + tolerance) / Math.Tan(angle / 2), radius/2);
+                                var e = Math.Sqrt(radius*radius + jointRadius*jointRadius - 2 * radius * jointRadius * Math.Cos(Math.PI - angle));
+                                var a1 = Math.Asin(Math.Sin(Math.PI - angle) / e * radius);
+                                var a2 = Math.PI / 2 - a1;
+                                offset = e / Math.Sin(angle) * Math.Sin(a2);
                             }
                             catch
                             {
@@ -180,55 +179,17 @@ namespace RodSteward
             return offsets;
         }
 
-        private Curve GetProfile(double radius, int sides, Rhino.Geometry.Vector3d normal)
+        private Curve GetProfile(double radius, int sides, Vector3d normal)
         {
             var profilePlane = new Plane(new Point3d(0, 0, 0), normal);
             var circle = new Circle(profilePlane, radius);
             return Polyline.CreateInscribedPolygon(circle, sides).ToPolylineCurve();
         }
 
-        private DMesh3 MeshToG3(Mesh source)
-        {
-            source.Compact();
-            source.Vertices.CombineIdentical(true, true);
-
-            var vertices = source.Vertices;
-            var faces = source.Faces;
-            var normals = source.Normals;
-
-            List<g3.Vector3d> flatV = vertices.Select(v => new g3.Vector3d(v.X, v.Y, v.Z)).ToList();
-
-            List<int> flatF = faces.SelectMany(f =>
-            {
-                if (f.IsTriangle)
-                    return new List<int>() { f.A, f.B, f.C };
-                else if (f.IsQuad)
-                    return new List<int>() { f.A, f.B, f.C, f.A, f.C, f.D };
-                else
-                    return new List<int>() { };
-            }).ToList();
-
-            List<g3.Vector3d> flatN = normals.Select(n => new g3.Vector3d(n.X, n.Y, n.Z)).ToList();
-
-            var mesh = DMesh3Builder.Build(flatV, flatF, flatN);
-            //mesh.CheckValidity(false, FailMode.Throw);
-            return mesh;
-        }
-
-        private Mesh G3ToMesh(DMesh3 source)
-        {
-            var mesh = new Mesh();
-            mesh.Vertices.AddVertices(source.Vertices().Select(v => new Point3d(v.x, v.y, v.z)));
-            mesh.Faces.AddFaces(source.Triangles().Select(t => new MeshFace(t.a, t.b, t.c)));
-            mesh.Normals.ComputeNormals();
-            mesh.Compact();
-            mesh.Vertices.CombineIdentical(true, true);
-            return mesh;
-        }
-        private Tuple<Dictionary<Tuple<int, int>, DMesh3>, Dictionary<Tuple<int, int>, Curve>> GetRodMeshes(List<Tuple<int, int>> edges,
+        private Tuple<Dictionary<Tuple<int, int>, Mesh>, Dictionary<Tuple<int, int>, Curve>> GetRodMeshes(List<Tuple<int, int>> edges,
             List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides)
         {
-            var rodMeshes = new Dictionary<Tuple<int, int>, DMesh3>();
+            var rodMeshes = new Dictionary<Tuple<int, int>, Mesh>();
             var rodCentrelines = new Dictionary<Tuple<int, int>, Curve>();
 
             foreach (Tuple<int, int> e in edges)
@@ -258,13 +219,13 @@ namespace RodSteward
 
                 rodCentrelines[e] = centreline;
 
-                rodMeshes[e] = MeshToG3(Mesh.CreateFromCurvePipe(centreline, radius, sides, 0, MeshPipeCapStyle.Flat, false));
+                rodMeshes[e] = Mesh.CreateFromCurvePipe(centreline, radius, sides, 0, MeshPipeCapStyle.Flat, false);
             }
 
             return Tuple.Create(rodMeshes, rodCentrelines);
         }
 
-        private Dictionary<int, List<Mesh>> GetJointMeshes(Dictionary<Tuple<int, int>, DMesh3> rodMeshes, List<Tuple<int, int>> edges,
+        private Dictionary<int, List<Mesh>> GetJointMeshes(Dictionary<Tuple<int, int>, Mesh> rodMeshes, List<Tuple<int, int>> edges,
             List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides,
             double jointLength, double jointThickness, double tolerance)
         {
@@ -313,43 +274,187 @@ namespace RodSteward
                     continue;
                 }
 
-                Mesh startMesh = Mesh.CreateFromCurvePipe(startCurve, jointRadius, sides, 0, MeshPipeCapStyle.Flat, false);
-                Mesh endMesh = Mesh.CreateFromCurvePipe(endCurve, jointRadius, sides, 0, MeshPipeCapStyle.Flat, false);
-
-                separateJointMeshes[e.Item1].Add(startMesh);
-                separateJointMeshes[e.Item2].Add(endMesh);
-
-                Polyline corePoly;
-
                 var vector = Point3d.Subtract(vertices[e.Item2], vertices[e.Item1]);
                 vector.Unitize();
-                var profile = GetProfile(jointRadius, sides, vector);
 
-                profile.TryGetPolyline(out corePoly);
-                foreach (var l in corePoly)
+                Polyline outerPoly;
+                Polyline innerPoly;
+                var outerProfile = GetProfile(jointRadius, sides, vector);
+                var innerProfile = GetProfile(radius, sides, vector);
+                outerProfile.TryGetPolyline(out outerPoly);
+                innerProfile.TryGetPolyline(out innerPoly);
+
+                // Convex hull points
+                foreach (var l in outerPoly.Skip(1))
                 {
                     jointCorePoints[e.Item1].Add(new double[] { l.X + vertices[e.Item1].X, l.Y + vertices[e.Item1].Y, l.Z + vertices[e.Item1].Z });
                     jointCorePoints[e.Item2].Add(new double[] { l.X + vertices[e.Item2].X, l.Y + vertices[e.Item2].Y, l.Z + vertices[e.Item2].Z });
                 }
+
+                // Start joint
+                var startMesh = new Mesh();
+                Vector3d startLength = vector * startCurve.GetLength();
+                Vector3d startOffsetLength = vector * offsets[e];
+
+                // V
+                startMesh.Vertices.Add(vertices[e.Item1]);
+                startMesh.Vertices.Add(Point3d.Add(vertices[e.Item1], startOffsetLength));
+                foreach (var p in outerPoly.Skip(1))
+                    startMesh.Vertices.Add(Point3d.Add(p, vertices[e.Item1]));
+                foreach (var p in outerPoly.Skip(1))
+                    startMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item1]), startLength));
+                foreach (var p in innerPoly.Skip(1))
+                    startMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item1]), startOffsetLength));
+                foreach (var p in innerPoly.Skip(1))
+                    startMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item1]), startLength));
+
+                // F
+                for (int i = 2; i < sides + 1; i++)
+                    startMesh.Faces.AddFace(0, i, i + 1);
+                startMesh.Faces.AddFace(0, sides + 1, 2);
+
+                for (int i = 2 * sides + 2; i < 3 * sides + 1; i++)
+                    startMesh.Faces.AddFace(1, i, i + 1);
+                startMesh.Faces.AddFace(1, 3 * sides + 1, 2 * sides + 2);
+
+                for (int i = 0; i < sides; i++)
+                {
+                    if (i < sides - 1)
+                    {
+                        startMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 3 + i);
+                        startMesh.Faces.AddFace(3 * sides + 2 + i, sides + 3 + i, 3 * sides + 3 + i);
+                    }
+                    else
+                    {
+                        startMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 2);
+                        startMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2, 3 * sides + 2);
+                    }
+                }
+
+                for (int i = 0; i < sides; i++)
+                {
+                    if (i < sides - 1)
+                    {
+                        startMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 3 + i);
+                        startMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 3 + i, 2 * sides + 3 + i);
+                    }
+                    else
+                    {
+                        startMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 2);
+                        startMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2, 2 * sides + 2);
+                    }
+                }
+
+                for (int i = 0; i < sides; i++)
+                {
+                    if (i < sides - 1)
+                    {
+                        startMesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 3 + i);
+                        startMesh.Faces.AddFace(2 + i, sides + 3 + i, 3 + i);
+                    }
+                    else
+                    {
+                        startMesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 2);
+                        startMesh.Faces.AddFace(2 + i, sides + 2, 2);
+                    }
+                }
+                startMesh.Normals.ComputeNormals();
+                startMesh.UnifyNormals();
+                startMesh.Normals.ComputeNormals();
+                separateJointMeshes[e.Item1].Add(startMesh);
+
+                // End joint
+                var endMesh = new Mesh();
+                Vector3d endLength = vector * -endCurve.GetLength();
+                Vector3d endOffsetLength = vector * -offsets[Tuple.Create(e.Item2, e.Item1)];
+
+                // V
+                endMesh.Vertices.Add(vertices[e.Item2]);
+                endMesh.Vertices.Add(Point3d.Add(vertices[e.Item2], endOffsetLength));
+                foreach (var p in outerPoly.Skip(1))
+                    endMesh.Vertices.Add(Point3d.Add(p, vertices[e.Item2]));
+                foreach (var p in outerPoly.Skip(1))
+                    endMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item2]), endLength));
+                foreach (var p in innerPoly.Skip(1))
+                    endMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item2]), endOffsetLength));
+                foreach (var p in innerPoly.Skip(1))
+                    endMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item2]), endLength));
+
+                // F
+                for (int i = 2; i < sides + 1; i++)
+                    endMesh.Faces.AddFace(0, i, i + 1);
+                endMesh.Faces.AddFace(0, sides + 1, 2);
+
+                for (int i = 2 * sides + 2; i < 3 * sides + 1; i++)
+                    endMesh.Faces.AddFace(1, i, i + 1);
+                endMesh.Faces.AddFace(1, 3 * sides + 1, 2 * sides + 2);
+
+                for (int i = 0; i < sides; i++)
+                {
+                    if (i < sides - 1)
+                    {
+                        endMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 3 + i);
+                        endMesh.Faces.AddFace(3 * sides + 2 + i, sides + 3 + i, 3 * sides + 3 + i);
+                    }
+                    else
+                    {
+                        endMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 2);
+                        endMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2, 3 * sides + 2);
+                    }
+                }
+
+                for (int i = 0; i < sides; i++)
+                {
+                    if (i < sides - 1)
+                    {
+                        endMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 3 + i);
+                        endMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 3 + i, 2 * sides + 3 + i);
+                    }
+                    else
+                    {
+                        endMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 2);
+                        endMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2, 2 * sides + 2);
+                    }
+                }
+
+                for (int i = 0; i < sides; i++)
+                {
+                    if (i < sides - 1)
+                    {
+                        endMesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 3 + i);
+                        endMesh.Faces.AddFace(2 + i, sides + 3 + i, 3 + i);
+                    }
+                    else
+                    {
+                        endMesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 2);
+                        endMesh.Faces.AddFace(2 + i, sides + 2, 2);
+                    }
+                }
+                endMesh.Normals.ComputeNormals();
+                endMesh.UnifyNormals();
+                endMesh.Normals.ComputeNormals();
+                separateJointMeshes[e.Item2].Add(endMesh);
             }
 
-            //foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
-            //{
-            //    try
-            //    {
-            //        var convHullRes = ConvexHull.Create(kvp.Value, DocumentTolerance());
-            //        var hullPoints = convHullRes.Result.Points.ToList();
-            //        var hullFaces = convHullRes.Result.Faces.ToList();
+            foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
+            {
+                try
+                {
+                    var convHullRes = ConvexHull.Create(kvp.Value, DocumentTolerance());
+                    var hullPoints = convHullRes.Result.Points.ToList();
+                    var hullFaces = convHullRes.Result.Faces.ToList();
 
-            //        var newMesh = new Mesh();
-            //        newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0], p.Position[1], p.Position[2])));
-            //        newMesh.Faces.AddFaces(hullFaces.Select(f => new MeshFace(hullPoints.IndexOf(f.Vertices[0]), hullPoints.IndexOf(f.Vertices[1]), hullPoints.IndexOf(f.Vertices[2]))));
-            //        newMesh.Normals.ComputeNormals();
-            //        newMesh.Compact();
-            //        separateJointMeshes[kvp.Key].Add(MeshToG3(newMesh));
-            //    }
-            //    catch { }
-            //}
+                    var newMesh = new Mesh();
+                    newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0], p.Position[1], p.Position[2])));
+                    newMesh.Faces.AddFaces(hullFaces.Select(f => new MeshFace(hullPoints.IndexOf(f.Vertices[0]), hullPoints.IndexOf(f.Vertices[1]), hullPoints.IndexOf(f.Vertices[2]))));
+                    newMesh.Normals.ComputeNormals();
+                    newMesh.UnifyNormals();
+                    newMesh.Normals.ComputeNormals();
+                    newMesh.Compact();
+                    separateJointMeshes[kvp.Key].Insert(0,newMesh); // Add conv hull to beginning
+                }
+                catch { }
+            }
 
             if (FastRender)
             {
@@ -362,40 +467,58 @@ namespace RodSteward
                     try
                     {
                         var resMesh = kvp.Value.First();
-                        for (int i = 1; i < kvp.Value.Count(); i++)
-                            resMesh = CarveOps.PerformCSG(resMesh, kvp.Value[i], Operations.Union);
+                        foreach (var m in kvp.Value.Skip(1))
+                        {
+                            resMesh = CarveOps.PerformCSG(resMesh, m, Operations.Union);
+                            if (resMesh == null)
+                                throw new Exception();
+                        }
+
+                        if (!resMesh.IsValid)
+                            throw new Exception();
 
                         jointMeshes[kvp.Key] = new List<Mesh>() { resMesh };
-                        //jointBreps[kvp.Key] = Brep.CreateBooleanUnion(kvp.Value, DocumentTolerance()).ToList();
-                        //jointBreps[kvp.Key] = Brep.CreateBooleanDifference(jointBreps[kvp.Key], rodBreps.Where(r => r.Key.Item1 == kvp.Key || r.Key.Item2 == kvp.Key).Select(r => r.Value), DocumentTolerance()).ToList();
                     }
                     catch
                     {
-                        this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
+                        try
+                        {
+                            // Backup logic. Skip convex hull and use Rhino boolean
+                            var rhMesh = Mesh.CreateBooleanUnion(kvp.Value.Skip(1));
+
+                            if (rhMesh.Count() == 1)
+                                jointMeshes[kvp.Key] = rhMesh.ToList();
+                            else
+                            {
+                                this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
+                            }
+                        }
+                        catch
+                        {
+                            this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
+                        }
                     }
                 }
             }
             return jointMeshes;
         }
 
-        private Tuple<List<Tuple<int,int>>, List<int>> FindBrepCollision(Dictionary<Tuple<int, int>, Brep> rodBreps, Dictionary<int, List<Brep>> jointBreps)
+        private Tuple<List<Tuple<int,int>>, List<int>> FindMeshCollision(Dictionary<Tuple<int, int>, Mesh> rodMeshes, Dictionary<int, List<Mesh>> jointMeshes)
         {
             var clashedRods = new List<Tuple<int, int>>();
             var clashedJoints = new List<int>();
 
-            var rodKeys = rodBreps.Keys.ToList();
-            var rodVals = rodBreps.Values.ToList();
-            var jointKeys = jointBreps.Keys.ToList();
-            var jointVals = jointBreps.Values.ToList();
+            var rodKeys = rodMeshes.Keys.ToList();
+            var rodVals = rodMeshes.Values.ToList();
+            var jointKeys = jointMeshes.Keys.ToList();
+            var jointVals = jointMeshes.Values.ToList();
 
             for (int i = 0; i < rodKeys.Count; i++)
             {
                 for (int j = i + 1; j < rodKeys.Count; j++)
                 {
-                    Curve[] intCurve;
-                    Point3d[] intPoints;
-                    Rhino.Geometry.Intersect.Intersection.BrepBrep(rodVals[i], rodVals[j], DocumentTolerance(), out intCurve, out intPoints);
-                    if (intCurve.Length > 0 || intPoints.Length > 0)
+                    var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshAccurate(rodVals[i], rodVals[j], DocumentTolerance());
+                    if (intersect != null && intersect.Length > 0)
                     {
                         clashedRods.Add(rodKeys[i]);
                         clashedRods.Add(rodKeys[j]);
@@ -409,10 +532,8 @@ namespace RodSteward
 
                     foreach (var jv in jointVals[j])
                     {
-                        Curve[] intCurve;
-                        Point3d[] intPoints;
-                        Rhino.Geometry.Intersect.Intersection.BrepBrep(rodVals[i], jv, DocumentTolerance(), out intCurve, out intPoints);
-                        if (intCurve.Length > 0 || intPoints.Length > 0)
+                        var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshAccurate(rodVals[i], jv, DocumentTolerance());
+                        if (intersect != null && intersect.Length > 0)
                         {
                             clashedRods.Add(rodKeys[i]);
                             clashedJoints.Add(jointKeys[j]);
@@ -431,10 +552,8 @@ namespace RodSteward
                     {
                         foreach (var jv in jointVals[j])
                         {
-                            Curve[] intCurve;
-                            Point3d[] intPoints;
-                            Rhino.Geometry.Intersect.Intersection.BrepBrep(iv, jv, DocumentTolerance(), out intCurve, out intPoints);
-                            if (intCurve.Length > 0 || intPoints.Length > 0)
+                            var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshAccurate(iv, jv, DocumentTolerance());
+                            if (intersect != null && intersect.Length > 0)
                             {
                                 clashedJoints.Add(jointKeys[i]);
                                 clashedJoints.Add(jointKeys[j]);
