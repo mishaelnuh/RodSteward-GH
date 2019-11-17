@@ -9,6 +9,8 @@ using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using MIConvexHull;
 using CarveRC;
+using System.Runtime.ExceptionServices;
+using System.Security;
 
 namespace RodSteward
 {
@@ -26,7 +28,7 @@ namespace RodSteward
         public Generator()
           : base("Generator", "RSGenerator",
               "Generate rod lengths and 3D printed joint meshes",
-              "RodSteward", "RodSteward")
+              "RodSteward", "Generator")
         {
         }
         public override void CreateAttributes()
@@ -225,6 +227,8 @@ namespace RodSteward
             return Tuple.Create(rodMeshes, rodCentrelines);
         }
 
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private Dictionary<int, List<Mesh>> GetJointMeshes(Dictionary<Tuple<int, int>, Mesh> rodMeshes, List<Tuple<int, int>> edges,
             List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides,
             double jointLength, double jointThickness, double tolerance)

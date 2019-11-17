@@ -16,7 +16,7 @@ namespace RodSteward
         public Mesh2Graph()
           : base("Mesh2Graph", "RSMesh2Graph",
               "Converts mesh to list of edges and vertices",
-              "RodSteward", "RodSteward")
+              "RodSteward", "Convert")
         {
         }
 
@@ -82,7 +82,7 @@ namespace RodSteward
         {
             get
             {
-                return Properties.Resources.generator;
+                return Properties.Resources.mesh;
             }
         }
     }

@@ -16,7 +16,7 @@ namespace RodSteward
         public Lines2Graph()
           : base("Lines2Graph", "RSLines2Graph",
               "Converts lines to list of edges and vertices",
-              "RodSteward", "RodSteward")
+              "RodSteward", "Convert")
         {
         }
 
@@ -141,7 +141,7 @@ namespace RodSteward
         {
             get
             {
-                return Properties.Resources.generator;
+                return Properties.Resources.lines;
             }
         }
     }
