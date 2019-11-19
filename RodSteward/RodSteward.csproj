@@ -73,7 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Lines2Graph.cs" />
-    <Compile Include="OutputRodCutPDF.cs" />
+    <Compile Include="OutputRodCutSVG.cs" />
     <Compile Include="OutputJointSTL.cs" />
     <Compile Include="Mesh2Graph.cs" />
     <Compile Include="Generator.cs" />
@@ -110,6 +110,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\rs.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\svg.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

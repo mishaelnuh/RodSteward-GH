@@ -15,16 +15,16 @@ using Grasshopper.Kernel.Types;
 
 namespace RodSteward
 {
-    public class OutputRodCutPDF : GH_Component
+    public class OutputRodCutSVG : GH_Component
     {
         private const double DOC_PADDING = 50;
         private const double ROD_PADDING = 10;
 
         private string outputMessage = "";
 
-        public OutputRodCutPDF()
-          : base("OutputRodCutPDF", "RSOutputRodCutPDF",
-              "Outputs rod lengths into rod cutting plan as PDF",
+        public OutputRodCutSVG()
+          : base("OutputRodCutSVG", "RSOutputRodCutSVG",
+              "Outputs rod lengths into rod cutting plan as SVG",
               "RodSteward", "Output")
         {
         }
@@ -151,7 +151,7 @@ namespace RodSteward
                 svgFile.Write(fs);
             }
 
-            outputMessage = "[" + DateTime.Now.ToString() + "]: Successfully wrote PDF laser cutting plan.";
+            outputMessage = "[" + DateTime.Now.ToString() + "]: Successfully wrote SVG laser cutting plan.";
             DA.SetData(0, outputMessage);
         }
 
@@ -159,7 +159,7 @@ namespace RodSteward
         {
             get
             {
-                return Properties.Resources.stl;
+                return Properties.Resources.svg;
             }
         }
     }
