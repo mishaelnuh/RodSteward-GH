@@ -68,6 +68,12 @@ namespace RodSteward
 
             data = data.OrderByDescending(c => c.GetLength()).ToList();
 
+            if (data.First().GetLength() > stockLength)
+            {
+                this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Stock length less than longest member length.");
+                return;
+            }
+
             foreach(var c in data)
             {
                 var len = c.GetLength();
