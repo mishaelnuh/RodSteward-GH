@@ -50,6 +50,9 @@
     <Reference Include="Grasshopper, Version=6.18.19266.14200, Culture=neutral, PublicKeyToken=dda4f5ec2cd80803, processorArchitecture=MSIL">
       <HintPath>..\packages\Grasshopper.6.18.19266.14201\lib\net45\Grasshopper.dll</HintPath>
     </Reference>
+    <Reference Include="IxMilia.Stl, Version=0.1.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\IxMilia.Stl.0.1.1\lib\portable45-net45+win8+wpa81\IxMilia.Stl.dll</HintPath>
+    </Reference>
     <Reference Include="MIConvexHull, Version=1.1.19.1018, Culture=neutral, PublicKeyToken=2644b6f8be52c998, processorArchitecture=MSIL">
       <HintPath>..\packages\MIConvexHull.1.1.19.1019\lib\netstandard1.0\MIConvexHull.dll</HintPath>
     </Reference>
@@ -69,6 +72,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Lines2Graph.cs" />
+    <Compile Include="OutputJointSTL.cs" />
     <Compile Include="Mesh2Graph.cs" />
     <Compile Include="Generator.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
