@@ -291,7 +291,7 @@ namespace RodSteward
                 }
 
                 // Create hollow joint arms
-                var startMesh = CreateJointArm(vertices[e.Item1], vector, endCurve.GetLength(), offsets[e], radius, jointRadius, sides);
+                var startMesh = CreateJointArm(vertices[e.Item1], vector, startCurve.GetLength(), offsets[e], radius, jointRadius, sides);
                 var endMesh = CreateJointArm(vertices[e.Item2], vector, -endCurve.GetLength(), -offsets[Tuple.Create(e.Item2, e.Item1)], radius, jointRadius, sides);
 
                 separateJointMeshes[e.Item1].Add(startMesh);
