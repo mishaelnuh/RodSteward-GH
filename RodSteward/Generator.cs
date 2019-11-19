@@ -121,7 +121,8 @@ namespace RodSteward
         {
             var offsets = new Dictionary<Tuple<int, int>, double>();
 
-            var jointRadius = radius + jointThickness + tolerance * 4; // add extra tolerance
+            var jointRadius = radius + jointThickness + tolerance; // add extra tolerance
+            var innerRadius = radius + tolerance;
 
             for (int vStart = 0; vStart < vertices.Count; vStart++)
             {
@@ -152,13 +153,12 @@ namespace RodSteward
                             vec2.Unitize();
 
                             var angle = Math.Acos(vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z);
-                            double offset = radius/2;
+                            double offset = innerRadius / 2;
                             try
                             {
-                                var e = Math.Sqrt(radius*radius + jointRadius*jointRadius - 2 * radius * jointRadius * Math.Cos(Math.PI - angle));
-                                var a1 = Math.Asin(Math.Sin(Math.PI - angle) / e * radius);
-                                var a2 = Math.PI / 2 - a1;
-                                offset = e / Math.Sin(angle) * Math.Sin(a2);
+                                offset = Math.Max((jointRadius) / Math.Tan(angle / 2), innerRadius / 2);
+                                if (Double.IsNaN(offset))
+                                    offset = innerRadius / 2;
                             }
                             catch
                             {
