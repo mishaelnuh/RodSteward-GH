@@ -8,7 +8,6 @@ using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using MIConvexHull;
-using CarveRC;
 using System.Runtime.ExceptionServices;
 using System.Security;
 using Grasshopper;
@@ -18,7 +17,7 @@ namespace RodSteward
     public class Generator : GH_Component
     {
         const int CIRCLE_SIDES = 100;
-        public bool FastRender { get; set; } = true;
+        public bool SkipMeshBoolean { get; set; } = true;
 
         private Dictionary<Tuple<int, int>, Mesh> rodMeshes = new Dictionary<Tuple<int, int>, Mesh>();
         private Dictionary<Tuple<int, int>, Curve> rodCentrelines = new Dictionary<Tuple<int, int>, Curve>();
@@ -469,7 +468,7 @@ namespace RodSteward
                 catch { }
             }
 
-            if (FastRender)
+            if (SkipMeshBoolean)
             {
                 jointMeshes = separateJointMeshes;
             }
@@ -477,42 +476,15 @@ namespace RodSteward
             {
                 foreach (KeyValuePair<int, List<Mesh>> kvp in separateJointMeshes)
                 {
-                    try
-                    {
-                        var resMesh = kvp.Value.First();
-                        foreach (var m in kvp.Value.Skip(1))
-                        {
-                            resMesh = CarveOps.PerformCSG(resMesh, m, Operations.Union);
-                            if (resMesh == null)
-                                throw new Exception();
-                        }
+                    var rhMesh = Mesh.CreateBooleanUnion(kvp.Value);
 
-                        if (!resMesh.IsValid)
-                            throw new Exception();
-
-                        jointMeshes[kvp.Key] = new List<Mesh>() { resMesh };
-                    }
-                    catch
-                    {
-                        try
-                        {
-                            // Backup logic. Skip convex hull and use Rhino boolean
-                            var rhMesh = Mesh.CreateBooleanUnion(kvp.Value.Skip(1));
-
-                            if (rhMesh.Count() == 1)
-                                jointMeshes[kvp.Key] = rhMesh.ToList();
-                            else
-                            {
-                                this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
-                            }
-                        }
-                        catch
-                        {
-                            this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Unable to boolean joint brep. Try changing some parameters.");
-                        }
-                    }
+                    if (rhMesh.Count() == 1)
+                        jointMeshes[kvp.Key] = rhMesh.ToList();
+                    else
+                        this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Mesh boolean failed. As usual...");
                 }
             }
+
             return jointMeshes;
         }
 
@@ -630,8 +602,8 @@ namespace RodSteward
             if (channel == GH_CanvasChannel.Objects)
             {
                 var component = Owner as Generator;
-                GH_Capsule button1 = GH_Capsule.CreateTextCapsule(ButtonBounds1, ButtonBounds1, component.FastRender ? GH_Palette.Black : GH_Palette.Grey, "Fast Render", 2, 0);
-                GH_Capsule button2 = GH_Capsule.CreateTextCapsule(ButtonBounds2, ButtonBounds2, !component.FastRender ? GH_Palette.Black : GH_Palette.Grey, "Full Render", 2, 0);
+                GH_Capsule button1 = GH_Capsule.CreateTextCapsule(ButtonBounds1, ButtonBounds1, component.SkipMeshBoolean ? GH_Palette.Black : GH_Palette.Grey, "Fast and Stable", 2, 0);
+                GH_Capsule button2 = GH_Capsule.CreateTextCapsule(ButtonBounds2, ButtonBounds2, !component.SkipMeshBoolean ? GH_Palette.Black : GH_Palette.Grey, "Mesh Boolean", 2, 0);
                 button1.Render(graphics, Selected, Owner.Locked, false);
                 button1.Dispose();
                 button2.Render(graphics, Selected, Owner.Locked, false);
@@ -647,9 +619,9 @@ namespace RodSteward
                 if (rec1.Contains(e.CanvasLocation))
                 {
                     var component = Owner as Generator;
-                    if (component.FastRender != true)
+                    if (component.SkipMeshBoolean != true)
                     {
-                        component.FastRender = true;
+                        component.SkipMeshBoolean = true;
                         component.ExpireSolution(true);
                     }
                     return GH_ObjectResponse.Handled;
@@ -657,9 +629,9 @@ namespace RodSteward
                 else if (rec2.Contains(e.CanvasLocation))
                 {
                     var component = Owner as Generator;
-                    if (component.FastRender != false)
+                    if (component.SkipMeshBoolean != false)
                     {
-                        component.FastRender = false;
+                        component.SkipMeshBoolean = false;
                         component.ExpireSolution(true);
                     }
                     return GH_ObjectResponse.Handled;

@@ -35,12 +35,6 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CarveRC">
-      <HintPath>Z:\RodSteward-GH\carverino\CarveRC.dll</HintPath>
-    </Reference>
-    <Reference Include="CarveSharp">
-      <HintPath>Z:\RodSteward-GH\carverino\CarveSharp.dll</HintPath>
-    </Reference>
     <Reference Include="Eto, Version=2.5.0.0, Culture=neutral, PublicKeyToken=552281e97c755530, processorArchitecture=MSIL">
       <HintPath>..\packages\RhinoCommon.6.18.19266.14201\lib\net45\Eto.dll</HintPath>
     </Reference>
@@ -116,8 +110,7 @@
   -->
   <PropertyGroup>
     <PostBuildEvent>Copy "$(TargetPath)" "$(TargetDir)$(ProjectName).gha"
-Erase "$(TargetPath)"
-Copy "$(SolutionDir)\carverino\CarveLibWrapper.dll" "$(TargetDir)\CarveLibWrapper.dll"</PostBuildEvent>
+Erase "$(TargetPath)"</PostBuildEvent>
   </PropertyGroup>
   <PropertyGroup>
     <FallbackCulture>en-US</FallbackCulture>

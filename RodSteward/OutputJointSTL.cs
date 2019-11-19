@@ -11,7 +11,6 @@ using System.IO;
 using IxMilia.Stl;
 using Grasshopper;
 using Grasshopper.Kernel.Data;
-using GH_IO.Types;
 using Grasshopper.Kernel.Types;
 
 namespace RodSteward

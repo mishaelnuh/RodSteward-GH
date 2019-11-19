@@ -4,10 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Grasshopper.Kernel;
-using Grasshopper.GUI;
-using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
-using MIConvexHull;
 
 namespace RodSteward
 {
