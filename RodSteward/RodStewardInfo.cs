@@ -17,15 +17,14 @@ namespace RodSteward
         {
             get
             {
-                //Return a 24x24 pixel bitmap to represent this GHA library.
-                return null;
+                return Properties.Resources.rs;
             }
         }
         public override string Description
         {
             get
             {
-                return "Generates 3D printed joints and standard rod structure from mesh.";
+                return "Generates 3D printed joints and standard rod structure.";
             }
         }
         public override Guid Id
@@ -47,7 +46,7 @@ namespace RodSteward
         {
             get
             {
-                return "mishael.nuh@mail.utoronto.ca";
+                return "mishael.ebel.nuh@gmail.com";
             }
         }
     }
