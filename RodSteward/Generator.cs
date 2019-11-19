@@ -16,7 +16,6 @@ namespace RodSteward
 {
     public class Generator : GH_Component
     {
-        const int CIRCLE_SIDES = 100;
         public bool SkipMeshBoolean { get; set; } = true;
 
         private Dictionary<Tuple<int, int>, Mesh> rodMeshes = new Dictionary<Tuple<int, int>, Mesh>();
@@ -97,8 +96,7 @@ namespace RodSteward
             if (!DA.GetData(6, ref tolerance)) { return; }
 
             if (edges == null || vertices == null) { return; }
-            if (radius <= 0 || sides < 0 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
-            if (sides == 1 || sides == 2) { throw new Exception("Invalid number of sides."); }
+            if (radius <= 0 || sides <= 2 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
 
             var offsets = GetRodOffsets(edges, vertices, jointThickness, radius, tolerance);
 
@@ -189,12 +187,6 @@ namespace RodSteward
             return offsets;
         }
 
-        private Curve GetProfile(double radius, int sides, Vector3d normal)
-        {
-            var profilePlane = new Plane(new Point3d(0, 0, 0), normal);
-            var circle = new Circle(profilePlane, radius);
-            return Polyline.CreateInscribedPolygon(circle, sides).ToPolylineCurve();
-        }
 
         private Tuple<Dictionary<Tuple<int, int>, Mesh>, Dictionary<Tuple<int, int>, Curve>> GetRodMeshes(List<Tuple<int, int>> edges,
             List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides)
@@ -235,8 +227,6 @@ namespace RodSteward
             return Tuple.Create(rodMeshes, rodCentrelines);
         }
 
-        [HandleProcessCorruptedStateExceptions]
-        [SecurityCritical]
         private Dictionary<int, List<Mesh>> GetJointMeshes(Dictionary<Tuple<int, int>, Mesh> rodMeshes, List<Tuple<int, int>> edges,
             List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides,
             double jointLength, double jointThickness, double tolerance)
@@ -286,165 +276,25 @@ namespace RodSteward
                     continue;
                 }
 
+                // Convex hull points
                 var vector = Point3d.Subtract(vertices[e.Item2], vertices[e.Item1]);
                 vector.Unitize();
 
                 Polyline outerPoly;
-                Polyline innerPoly;
                 var outerProfile = GetProfile(jointRadius, sides, vector);
-                var innerProfile = GetProfile(radius, sides, vector);
                 outerProfile.TryGetPolyline(out outerPoly);
-                innerProfile.TryGetPolyline(out innerPoly);
 
-                // Convex hull points
                 foreach (var l in outerPoly.Skip(1))
                 {
                     jointCorePoints[e.Item1].Add(new double[] { l.X + vertices[e.Item1].X, l.Y + vertices[e.Item1].Y, l.Z + vertices[e.Item1].Z });
                     jointCorePoints[e.Item2].Add(new double[] { l.X + vertices[e.Item2].X, l.Y + vertices[e.Item2].Y, l.Z + vertices[e.Item2].Z });
                 }
 
-                // Start joint
-                var startMesh = new Mesh();
-                Vector3d startLength = vector * startCurve.GetLength();
-                Vector3d startOffsetLength = vector * offsets[e];
+                // Create hollow joint arms
+                var startMesh = CreateJointArm(vertices[e.Item1], vector, endCurve.GetLength(), offsets[e], radius, jointRadius, sides);
+                var endMesh = CreateJointArm(vertices[e.Item2], vector, -endCurve.GetLength(), -offsets[Tuple.Create(e.Item2, e.Item1)], radius, jointRadius, sides);
 
-                // V
-                startMesh.Vertices.Add(vertices[e.Item1]);
-                startMesh.Vertices.Add(Point3d.Add(vertices[e.Item1], startOffsetLength));
-                foreach (var p in outerPoly.Skip(1))
-                    startMesh.Vertices.Add(Point3d.Add(p, vertices[e.Item1]));
-                foreach (var p in outerPoly.Skip(1))
-                    startMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item1]), startLength));
-                foreach (var p in innerPoly.Skip(1))
-                    startMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item1]), startOffsetLength));
-                foreach (var p in innerPoly.Skip(1))
-                    startMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item1]), startLength));
-
-                // F
-                for (int i = 2; i < sides + 1; i++)
-                    startMesh.Faces.AddFace(0, i, i + 1);
-                startMesh.Faces.AddFace(0, sides + 1, 2);
-
-                for (int i = 2 * sides + 2; i < 3 * sides + 1; i++)
-                    startMesh.Faces.AddFace(1, i, i + 1);
-                startMesh.Faces.AddFace(1, 3 * sides + 1, 2 * sides + 2);
-
-                for (int i = 0; i < sides; i++)
-                {
-                    if (i < sides - 1)
-                    {
-                        startMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 3 + i);
-                        startMesh.Faces.AddFace(3 * sides + 2 + i, sides + 3 + i, 3 * sides + 3 + i);
-                    }
-                    else
-                    {
-                        startMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 2);
-                        startMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2, 3 * sides + 2);
-                    }
-                }
-
-                for (int i = 0; i < sides; i++)
-                {
-                    if (i < sides - 1)
-                    {
-                        startMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 3 + i);
-                        startMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 3 + i, 2 * sides + 3 + i);
-                    }
-                    else
-                    {
-                        startMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 2);
-                        startMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2, 2 * sides + 2);
-                    }
-                }
-
-                for (int i = 0; i < sides; i++)
-                {
-                    if (i < sides - 1)
-                    {
-                        startMesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 3 + i);
-                        startMesh.Faces.AddFace(2 + i, sides + 3 + i, 3 + i);
-                    }
-                    else
-                    {
-                        startMesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 2);
-                        startMesh.Faces.AddFace(2 + i, sides + 2, 2);
-                    }
-                }
-                startMesh.Normals.ComputeNormals();
-                startMesh.UnifyNormals();
-                startMesh.Normals.ComputeNormals();
                 separateJointMeshes[e.Item1].Add(startMesh);
-
-                // End joint
-                var endMesh = new Mesh();
-                Vector3d endLength = vector * -endCurve.GetLength();
-                Vector3d endOffsetLength = vector * -offsets[Tuple.Create(e.Item2, e.Item1)];
-
-                // V
-                endMesh.Vertices.Add(vertices[e.Item2]);
-                endMesh.Vertices.Add(Point3d.Add(vertices[e.Item2], endOffsetLength));
-                foreach (var p in outerPoly.Skip(1))
-                    endMesh.Vertices.Add(Point3d.Add(p, vertices[e.Item2]));
-                foreach (var p in outerPoly.Skip(1))
-                    endMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item2]), endLength));
-                foreach (var p in innerPoly.Skip(1))
-                    endMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item2]), endOffsetLength));
-                foreach (var p in innerPoly.Skip(1))
-                    endMesh.Vertices.Add(Point3d.Add(Point3d.Add(p, vertices[e.Item2]), endLength));
-
-                // F
-                for (int i = 2; i < sides + 1; i++)
-                    endMesh.Faces.AddFace(0, i, i + 1);
-                endMesh.Faces.AddFace(0, sides + 1, 2);
-
-                for (int i = 2 * sides + 2; i < 3 * sides + 1; i++)
-                    endMesh.Faces.AddFace(1, i, i + 1);
-                endMesh.Faces.AddFace(1, 3 * sides + 1, 2 * sides + 2);
-
-                for (int i = 0; i < sides; i++)
-                {
-                    if (i < sides - 1)
-                    {
-                        endMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 3 + i);
-                        endMesh.Faces.AddFace(3 * sides + 2 + i, sides + 3 + i, 3 * sides + 3 + i);
-                    }
-                    else
-                    {
-                        endMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 2);
-                        endMesh.Faces.AddFace(3 * sides + 2 + i, sides + 2, 3 * sides + 2);
-                    }
-                }
-
-                for (int i = 0; i < sides; i++)
-                {
-                    if (i < sides - 1)
-                    {
-                        endMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 3 + i);
-                        endMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 3 + i, 2 * sides + 3 + i);
-                    }
-                    else
-                    {
-                        endMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 2);
-                        endMesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2, 2 * sides + 2);
-                    }
-                }
-
-                for (int i = 0; i < sides; i++)
-                {
-                    if (i < sides - 1)
-                    {
-                        endMesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 3 + i);
-                        endMesh.Faces.AddFace(2 + i, sides + 3 + i, 3 + i);
-                    }
-                    else
-                    {
-                        endMesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 2);
-                        endMesh.Faces.AddFace(2 + i, sides + 2, 2);
-                    }
-                }
-                endMesh.Normals.ComputeNormals();
-                endMesh.UnifyNormals();
-                endMesh.Normals.ComputeNormals();
                 separateJointMeshes[e.Item2].Add(endMesh);
             }
 
@@ -558,6 +408,96 @@ namespace RodSteward
             return Tuple.Create(clashedRods, clashedJoints);
         }
 
+        private Curve GetProfile(double radius, int sides, Vector3d normal)
+        {
+            var profilePlane = new Plane(new Point3d(0, 0, 0), normal);
+            var circle = new Circle(profilePlane, radius);
+            return Polyline.CreateInscribedPolygon(circle, sides).ToPolylineCurve();
+        }
+
+        private Mesh CreateJointArm(Point3d origin, Vector3d direction, double length, double offset, double radius, double jointRadius, int sides)
+        {
+            var mesh = new Mesh();
+
+            Polyline outerPoly;
+            Polyline innerPoly;
+            var outerProfile = GetProfile(jointRadius, sides, direction);
+            var innerProfile = GetProfile(radius, sides, direction);
+            outerProfile.TryGetPolyline(out outerPoly);
+            innerProfile.TryGetPolyline(out innerPoly);
+
+            Vector3d startLength = direction * length;
+            Vector3d startOffsetLength = direction * offset;
+
+            // V
+            mesh.Vertices.Add(origin);
+            mesh.Vertices.Add(Point3d.Add(origin, startOffsetLength));
+            foreach (var p in outerPoly.Skip(1))
+                mesh.Vertices.Add(Point3d.Add(p, origin));
+            foreach (var p in outerPoly.Skip(1))
+                mesh.Vertices.Add(Point3d.Add(Point3d.Add(p, origin), startLength));
+            foreach (var p in innerPoly.Skip(1))
+                mesh.Vertices.Add(Point3d.Add(Point3d.Add(p, origin), startOffsetLength));
+            foreach (var p in innerPoly.Skip(1))
+                mesh.Vertices.Add(Point3d.Add(Point3d.Add(p, origin), startLength));
+
+            // F
+            for (int i = 2; i < sides + 1; i++)
+                mesh.Faces.AddFace(0, i, i + 1);
+            mesh.Faces.AddFace(0, sides + 1, 2);
+
+            for (int i = 2 * sides + 2; i < 3 * sides + 1; i++)
+                mesh.Faces.AddFace(1, i, i + 1);
+            mesh.Faces.AddFace(1, 3 * sides + 1, 2 * sides + 2);
+
+            for (int i = 0; i < sides; i++)
+            {
+                if (i < sides - 1)
+                {
+                    mesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 3 + i);
+                    mesh.Faces.AddFace(3 * sides + 2 + i, sides + 3 + i, 3 * sides + 3 + i);
+                }
+                else
+                {
+                    mesh.Faces.AddFace(3 * sides + 2 + i, sides + 2 + i, sides + 2);
+                    mesh.Faces.AddFace(3 * sides + 2 + i, sides + 2, 3 * sides + 2);
+                }
+            }
+
+            for (int i = 0; i < sides; i++)
+            {
+                if (i < sides - 1)
+                {
+                    mesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 3 + i);
+                    mesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 3 + i, 2 * sides + 3 + i);
+                }
+                else
+                {
+                    mesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2 + i, 3 * sides + 2);
+                    mesh.Faces.AddFace(2 * sides + 2 + i, 3 * sides + 2, 2 * sides + 2);
+                }
+            }
+
+            for (int i = 0; i < sides; i++)
+            {
+                if (i < sides - 1)
+                {
+                    mesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 3 + i);
+                    mesh.Faces.AddFace(2 + i, sides + 3 + i, 3 + i);
+                }
+                else
+                {
+                    mesh.Faces.AddFace(2 + i, sides + 2 + i, sides + 2);
+                    mesh.Faces.AddFace(2 + i, sides + 2, 2);
+                }
+            }
+            mesh.Normals.ComputeNormals();
+            mesh.UnifyNormals();
+            mesh.Normals.ComputeNormals();
+
+            return mesh;
+        }
+
         protected override System.Drawing.Bitmap Icon
         {
             get
@@ -602,8 +542,8 @@ namespace RodSteward
             if (channel == GH_CanvasChannel.Objects)
             {
                 var component = Owner as Generator;
-                GH_Capsule button1 = GH_Capsule.CreateTextCapsule(ButtonBounds1, ButtonBounds1, component.SkipMeshBoolean ? GH_Palette.Black : GH_Palette.Grey, "Fast and Stable", 2, 0);
-                GH_Capsule button2 = GH_Capsule.CreateTextCapsule(ButtonBounds2, ButtonBounds2, !component.SkipMeshBoolean ? GH_Palette.Black : GH_Palette.Grey, "Mesh Boolean", 2, 0);
+                GH_Capsule button1 = GH_Capsule.CreateTextCapsule(ButtonBounds1, ButtonBounds1, component.SkipMeshBoolean ? GH_Palette.Black : GH_Palette.Grey, "Stable", 2, 0);
+                GH_Capsule button2 = GH_Capsule.CreateTextCapsule(ButtonBounds2, ButtonBounds2, !component.SkipMeshBoolean ? GH_Palette.Black : GH_Palette.Grey, "M.Boolean", 2, 0);
                 button1.Render(graphics, Selected, Owner.Locked, false);
                 button1.Dispose();
                 button2.Render(graphics, Selected, Owner.Locked, false);

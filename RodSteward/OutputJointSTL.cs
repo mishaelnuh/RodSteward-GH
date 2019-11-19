@@ -51,6 +51,7 @@ namespace RodSteward
 
             if (!trigger) {
                 DA.SetData(0, outputMessage);
+                return;
             }
 
             if (data == null) { return; }
