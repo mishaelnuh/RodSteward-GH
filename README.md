@@ -15,3 +15,4 @@ RodSteward-GH is a Grasshopper plugin which enables users to create structures f
     - `Joint Length`: Length of dowel slotted into joint.
     - `Tolerance`: Machine tolerance for manufacturing.
 4. ![](https://raw.githubusercontent.com/mishaelnuh/RodSteward-GH/master/icons/stl.png) `OutputJointSTL`: Exports joint meshes as STL files to target directory.
+5. ![](https://raw.githubusercontent.com/mishaelnuh/RodSteward-GH/master/icons/svg.png) `OutputRodCutSVG`: Performs bin packing and exports laser cutting plan as SVG file to target directory.
