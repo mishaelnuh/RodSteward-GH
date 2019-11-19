@@ -8,19 +8,23 @@ using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using System.IO;
-using IxMilia.Stl;
+using Svg;
 using Grasshopper;
 using Grasshopper.Kernel.Data;
 using Grasshopper.Kernel.Types;
 
 namespace RodSteward
 {
-    public class OutputRodBinPacked : GH_Component
+    public class OutputRodCutPDF : GH_Component
     {
+        private const double DOC_PADDING = 50;
+        private const double ROD_PADDING = 10;
+
         private string outputMessage = "";
-        public OutputRodBinPacked()
-          : base("OutputRodBinPacked", "RSOutputRodBinPacked",
-              "Outputs rod lengths into rod cutting plan",
+
+        public OutputRodCutPDF()
+          : base("OutputRodCutPDF", "RSOutputRodCutPDF",
+              "Outputs rod lengths into rod cutting plan as PDF",
               "RodSteward", "Output")
         {
         }
@@ -31,6 +35,7 @@ namespace RodSteward
         {
             pManager.AddCurveParameter("Rod Curves", "RC", "Joint meshes from Generator component", GH_ParamAccess.list);
             pManager.AddNumberParameter("Stock Length", "SL", "Length of stock rods", GH_ParamAccess.item);
+            pManager.AddNumberParameter("Radius", "R", "Radius of rods", GH_ParamAccess.item);
             pManager.AddTextParameter("Directory", "D", "Output directory", GH_ParamAccess.item);
             pManager.AddBooleanParameter("Write Trigger", "T", "Triggers output", GH_ParamAccess.item);
         }
@@ -45,13 +50,15 @@ namespace RodSteward
         {
             List<Curve> data = new List<Curve>();
             double stockLength = 0;
+            double radius = 0;
             string dir = null;
             bool trigger = false;
 
             if (!DA.GetDataList(0, data)) { return; }
             if (!DA.GetData(1, ref stockLength)) { return; }
-            if (!DA.GetData(2, ref dir)) { return; }
-            if (!DA.GetData(3, ref trigger)) { return; }
+            if (!DA.GetData(2, ref radius)) { return; }
+            if (!DA.GetData(3, ref dir)) { return; }
+            if (!DA.GetData(4, ref trigger)) { return; }
 
             if (data == null) { return; }
             if (data.Count == 0) { return; }
@@ -103,7 +110,48 @@ namespace RodSteward
             foreach (var file in dirFiles.Where(f => f.Contains("RS_Laser_Cut_Plan")))
                 File.Delete(file);
 
-            outputMessage = "[" + DateTime.Now.ToString() + "]: Successfully wrote DXF laser cutting plan.";
+            var svgFile = new SvgDocument()
+            {
+                Width = new SvgUnit(SvgUnitType.None, (float)(stockLength + DOC_PADDING * 2)),
+                Height = new SvgUnit(SvgUnitType.None, (float)(radius * 2 * binLengths.Count() + ROD_PADDING * (binLengths.Count() - 1) + DOC_PADDING * 2)),
+            };
+            svgFile.ViewBox = new SvgViewBox(0, 0, svgFile.Width, svgFile.Height);
+
+            double offset_y = DOC_PADDING;
+            foreach (var b in binsTree.Branches)
+            {
+                double offset_x = DOC_PADDING;
+                svgFile.Children.Add(new SvgLine()
+                {
+                    StartX = (float)(offset_x),
+                    EndX = (float)(offset_x),
+                    StartY = (float)(offset_y),
+                    EndY = (float)(offset_y + radius * 2),
+                    Stroke = new SvgColourServer(System.Drawing.Color.Red),
+                    StrokeWidth = 2,
+                });
+                foreach (var l in b)
+                {
+                    offset_x += (float)l;
+                    svgFile.Children.Add(new SvgLine()
+                    {
+                        StartX = (float)(offset_x),
+                        EndX = (float)(offset_x),
+                        StartY = (float)(offset_y),
+                        EndY = (float)(offset_y + radius * 2),
+                        Stroke = new SvgColourServer(System.Drawing.Color.Red),
+                        StrokeWidth = 2,
+                    });
+                }
+                offset_y += radius * 2 + ROD_PADDING;
+            }
+
+            using (FileStream fs = File.Create(Path.Combine(dir, "RS_Laser_Cut_Plan.svg")))
+            {
+                svgFile.Write(fs);
+            }
+
+            outputMessage = "[" + DateTime.Now.ToString() + "]: Successfully wrote PDF laser cutting plan.";
             DA.SetData(0, outputMessage);
         }
 

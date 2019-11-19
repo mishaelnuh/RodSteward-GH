@@ -38,6 +38,9 @@
     <Reference Include="Eto, Version=2.5.0.0, Culture=neutral, PublicKeyToken=552281e97c755530, processorArchitecture=MSIL">
       <HintPath>..\packages\RhinoCommon.6.18.19266.14201\lib\net45\Eto.dll</HintPath>
     </Reference>
+    <Reference Include="Fizzler, Version=1.1.21209.0, Culture=neutral, PublicKeyToken=4ebff4844e382110, processorArchitecture=MSIL">
+      <HintPath>..\packages\Fizzler.1.1.0\lib\net35\Fizzler.dll</HintPath>
+    </Reference>
     <Reference Include="GH_IO, Version=6.18.19266.14200, Culture=neutral, PublicKeyToken=6a29997d2e6b4f97, processorArchitecture=MSIL">
       <HintPath>..\packages\Grasshopper.6.18.19266.14201\lib\net45\GH_IO.dll</HintPath>
     </Reference>
@@ -56,9 +59,13 @@
     <Reference Include="RhinoCommon, Version=6.18.19266.14200, Culture=neutral, PublicKeyToken=552281e97c755530, processorArchitecture=MSIL">
       <HintPath>..\packages\RhinoCommon.6.18.19266.14201\lib\net45\RhinoCommon.dll</HintPath>
     </Reference>
+    <Reference Include="Svg, Version=3.0.0.0, Culture=neutral, PublicKeyToken=12a0bac221edeae2, processorArchitecture=MSIL">
+      <HintPath>..\packages\Svg.3.0.84\lib\net472\Svg.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Data" />
+    <Reference Include="System.Web" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Drawing" />
@@ -66,7 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Lines2Graph.cs" />
-    <Compile Include="OutputRodBinPacked.cs" />
+    <Compile Include="OutputRodCutPDF.cs" />
     <Compile Include="OutputJointSTL.cs" />
     <Compile Include="Mesh2Graph.cs" />
     <Compile Include="Generator.cs" />
