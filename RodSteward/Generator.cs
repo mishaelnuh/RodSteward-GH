@@ -11,6 +11,7 @@ using MIConvexHull;
 using CarveRC;
 using System.Runtime.ExceptionServices;
 using System.Security;
+using Grasshopper;
 
 namespace RodSteward
 {
@@ -51,7 +52,7 @@ namespace RodSteward
 
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
         {
-            pManager.AddMeshParameter("Joints", "J", "Joint meshes for structure", GH_ParamAccess.list);
+            pManager.AddMeshParameter("Joints", "J", "Joint meshes for structure", GH_ParamAccess.tree);
             pManager.AddMeshParameter("Rods", "R", "Rod meshes for structure", GH_ParamAccess.list);
             pManager.AddCurveParameter("Rod Curves", "RC", "Rod centreline curves", GH_ParamAccess.list);
 
@@ -112,7 +113,15 @@ namespace RodSteward
             clashedRods = collisions.Item1;
             clashedJoints = collisions.Item2;
 
-            DA.SetDataList(0, jointMeshes.Values.SelectMany(j => j).ToList());
+            var jointMeshTree = new DataTree<Mesh>();
+            
+            foreach(var kvp in jointMeshes)
+            {
+                var path = new Grasshopper.Kernel.Data.GH_Path(kvp.Key);
+                jointMeshTree.AddRange(kvp.Value, path);
+            }
+
+            DA.SetDataTree(0, jointMeshTree);
             DA.SetDataList(1, rodMeshes.Values.ToList());
             DA.SetDataList(2, rodCentrelines.Values.ToList());
         }
