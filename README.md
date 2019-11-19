@@ -1,6 +1,6 @@
 # RodSteward-GH
 
-RodSteward-GH is a Grasshopper plugin which enables users to create structures from 3D printed joints and cut dowels. It is based on the RodSteward software package developed by [alecjacobson](https://github.com/alecjacobson/). The RodSteward-GH algorithm deviates from the original software as it leverages Rhino and Grasshopper functionality. More information on the RodSteward paper can be found [here](http://www.dgp.toronto.edu/projects/rodsteward/).
+RodSteward-GH is a Grasshopper plugin which enables users to create structures from 3D printed joints and cut dowels. It is based on the RodSteward software package developed by [alecjacobson](https://github.com/alecjacobson/). The RodSteward-GH codes deviates from the original software as it leverages Rhino and Grasshopper functionality. More information on the RodSteward paper can be found [here](http://www.dgp.toronto.edu/projects/rodsteward/).
 
 
 ## Components
