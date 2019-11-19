@@ -31,7 +31,7 @@ namespace RodSteward
         {
             pManager.AddMeshParameter("Joint", "J", "Joint meshes from Generator component", GH_ParamAccess.tree);
             pManager.AddTextParameter("Directory", "D", "Output directory", GH_ParamAccess.item);
-            pManager.AddBooleanParameter("WriteTrigger", "T", "Triggers output", GH_ParamAccess.item);
+            pManager.AddBooleanParameter("Write Trigger", "T", "Triggers output", GH_ParamAccess.item);
         }
 
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -59,7 +59,8 @@ namespace RodSteward
 
             if (!Directory.Exists(dir))
             {
-                this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Output directory does not exists.");
+                outputMessage = "[" + DateTime.Now.ToString() + "]: Output directory does not exists.";
+                DA.SetData(0, outputMessage);
                 return;
             }
 
