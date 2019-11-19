@@ -2,6 +2,7 @@
 
 RodSteward-GH is a Grasshopper plugin which enables users to create structures from 3D printed joints and cut dowels. It is based on the RodSteward software package developed by [alecjacobson](https://github.com/alecjacobson/). The RodSteward-GH code deviates from the original software as it leverages Rhino and Grasshopper functionality. More information on the RodSteward paper can be found [here](http://www.dgp.toronto.edu/projects/rodsteward/).
 
+RodSteward-GH is built for Rhinoceros 6 for Windows. The plugin has not been tested for use on the Mac version.
 
 ## Components
 1. ![](https://raw.githubusercontent.com/mishaelnuh/RodSteward-GH/master/icons/mesh.png) `Mesh2Graph`: Converts meshes to a list of edges and vertices for use in the `Generator` component.
