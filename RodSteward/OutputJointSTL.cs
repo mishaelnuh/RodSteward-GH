@@ -106,7 +106,7 @@ namespace RodSteward
                 }
             }
 
-            outputMessage = "Successfully wrote " + fileCounter.ToString() + "STL files.";
+            outputMessage = "[" + DateTime.Now.ToString() + "]: Successfully wrote " + fileCounter.ToString() + " STL files.";
             DA.SetData(0, outputMessage);
         }
 
@@ -114,7 +114,7 @@ namespace RodSteward
         {
             get
             {
-                return Properties.Resources.mesh;
+                return Properties.Resources.stl;
             }
         }
     }
