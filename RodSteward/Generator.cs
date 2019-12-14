@@ -127,7 +127,7 @@ namespace RodSteward
         {
             var offsets = new Dictionary<Tuple<int, int>, double>();
 
-            var jointRadius = radius + jointThickness + tolerance; // add extra tolerance
+            var jointRadius = radius + jointThickness + tolerance;
             var innerRadius = radius + tolerance;
 
             for (int vStart = 0; vStart < vertices.Count; vStart++)
@@ -153,21 +153,41 @@ namespace RodSteward
                             var key1 = Tuple.Create(vStart, connectedVertices[vEnd]);
                             var key2 = Tuple.Create(vStart, connectedVertices[vCompare]);
 
+                            // Calculate angle
+                            // Use procedure from: https://people.eecs.berkeley.edu/~wkahan/Triangle.pdf
+                            // to minimize error for small angles
+
                             var vec1 = vertices[connectedVertices[vEnd]] - vertices[vStart];
                             var vec2 = vertices[connectedVertices[vCompare]] - vertices[vStart];
-                            vec1.Unitize();
-                            vec2.Unitize();
+                            var vec3 = Vector3d.Subtract(vec1, vec2);
+                            var mag1 = vec1.Length;
+                            var mag2 = vec2.Length;
+                            var mag3 = vec3.Length;
 
-                            var angle = Math.Acos(vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z);
-                            double offset = innerRadius / 2;
-                            try
+                            if (mag2 > mag1)
                             {
-                                offset = Math.Max((jointRadius) / Math.Tan(angle / 2), innerRadius / 2);
-                                if (Double.IsNaN(offset))
-                                    offset = innerRadius / 2;
+                                var t = mag2;
+                                mag2 = mag1;
+                                mag1 = t;
                             }
-                            catch
+
+                            double mu = 0;
+                            if (mag2 >= mag3)
+                                mu = mag3 - (mag1 - mag2);
+                            else
+                                mu = mag2 - (mag1 - mag3);
+
+                            var t1 = ((mag1 - mag2) + mag3) * mu;
+                            var t2 = (mag1 + (mag2 + mag3)) * ((mag1 - mag3) + mag2);
+
+                            double divParam = 0;
+                            double offset = 0;
+                            if (Math.Abs(t2) <= 1e-6)
+                                offset = jointRadius;
+                            else
                             {
+                                divParam = Math.Sqrt(t1 / t2);
+                                offset = Math.Max(jointRadius / divParam, jointRadius);
                             }
 
                             if (offsets.ContainsKey(key1))
