@@ -83,27 +83,26 @@ namespace RodSteward
             double jointLength = 0;
             double tolerance = 0;
 
+            model = new Model();
+
             if (!DA.GetDataList(0, edges)) { return; }
             if (!DA.GetDataList(1, vertices)) { return; }
-            if (!DA.GetData(2, ref sides)) { return; }
-            if (!DA.GetData(3, ref radius)) { return; }
-            if (!DA.GetData(4, ref jointThickness)) { return; }
-            if (!DA.GetData(5, ref jointLength)) { return; }
-            if (!DA.GetData(6, ref tolerance)) { return; }
+            if (!DA.GetData(2, ref sides)) { sides = model.Sides; }
+            if (!DA.GetData(3, ref radius)) { radius = model.Radius; }
+            if (!DA.GetData(4, ref jointThickness)) { jointThickness = model.JointThickness; }
+            if (!DA.GetData(5, ref jointLength)) { jointLength = model.JointLength; }
+            if (!DA.GetData(6, ref tolerance)) { tolerance = model.Tolerance; }
 
             if (edges == null || vertices == null) { return; }
             if (radius <= 0 || sides <= 2 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
 
-            model = new Model()
-            {
-                Edges = edges,
-                Vertices = vertices,
-                Sides = (int)Math.Floor(sides),
-                Radius = radius,
-                JointThickness = jointThickness,
-                JointLength = jointLength,
-                Tolerance = tolerance,
-            };
+            model.Edges = edges;
+            model.Vertices = vertices;
+            model.Sides = (int)Math.Floor(sides);
+            model.Radius = radius;
+            model.JointThickness = jointThickness;
+            model.JointLength = jointLength;
+            model.Tolerance = tolerance;
 
             model.Generate();
             model.CalculateClashes();
