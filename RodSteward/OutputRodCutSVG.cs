@@ -33,9 +33,8 @@ namespace RodSteward
 
         protected override void RegisterInputParams(GH_InputParamManager pManager)
         {
-            pManager.AddCurveParameter("Rod Curves", "RC", "Joint meshes from Generator component", GH_ParamAccess.list);
+            pManager.AddGenericParameter("Model", "M", "Model object", GH_ParamAccess.item);
             pManager.AddNumberParameter("Stock Length", "SL", "Length of stock rods", GH_ParamAccess.item);
-            pManager.AddNumberParameter("Radius", "R", "Radius of rods", GH_ParamAccess.item);
             pManager.AddTextParameter("Directory", "D", "Output directory", GH_ParamAccess.item);
             pManager.AddBooleanParameter("Write Trigger", "T", "Triggers output", GH_ParamAccess.item);
         }
@@ -48,35 +47,34 @@ namespace RodSteward
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            List<Curve> data = new List<Curve>();
+            Model model = new Model();
             double stockLength = 0;
-            double radius = 0;
             string dir = null;
             bool trigger = false;
 
-            if (!DA.GetDataList(0, data)) { return; }
+            if (!DA.GetData(0, ref model)) { return; }
             if (!DA.GetData(1, ref stockLength)) { return; }
-            if (!DA.GetData(2, ref radius)) { return; }
-            if (!DA.GetData(3, ref dir)) { return; }
-            if (!DA.GetData(4, ref trigger)) { return; }
+            if (!DA.GetData(2, ref dir)) { return; }
+            if (!DA.GetData(3, ref trigger)) { return; }
 
-            if (data == null) { return; }
-            if (data.Count == 0) { return; }
+            if (model == null) { return; }
 
             var binLengths = new List<double>();
             var binsTree = new DataTree<double>();
 
-            data = data.OrderByDescending(c => c.GetLength()).ToList();
+            var lengths = model.RodCentrelines.Values
+                .Select(c => c.GetLength())
+                .OrderByDescending(c => c)
+                .ToList();
 
-            if (data.First().GetLength() > stockLength)
+            if (lengths.First() > stockLength)
             {
                 this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Stock length less than longest member length.");
                 return;
             }
 
-            foreach(var c in data)
+            foreach(var len in lengths)
             {
-                var len = c.GetLength();
                 bool added = false;
                 for(int i = 0; i < binLengths.Count(); i++)
                 {
@@ -119,7 +117,7 @@ namespace RodSteward
             var svgFile = new SvgDocument()
             {
                 Width = new SvgUnit(SvgUnitType.None, (float)(stockLength + DOC_PADDING * 2)),
-                Height = new SvgUnit(SvgUnitType.None, (float)(radius * 2 * binLengths.Count() + ROD_PADDING * (binLengths.Count() - 1) + DOC_PADDING * 2)),
+                Height = new SvgUnit(SvgUnitType.None, (float)(model.Radius * 2 * binLengths.Count() + ROD_PADDING * (binLengths.Count() - 1) + DOC_PADDING * 2)),
             };
             svgFile.ViewBox = new SvgViewBox(0, 0, svgFile.Width, svgFile.Height);
 
@@ -132,7 +130,7 @@ namespace RodSteward
                     StartX = (float)(offset_x),
                     EndX = (float)(offset_x),
                     StartY = (float)(offset_y),
-                    EndY = (float)(offset_y + radius * 2),
+                    EndY = (float)(offset_y + model.Radius * 2),
                     Stroke = new SvgColourServer(System.Drawing.Color.Red),
                     StrokeWidth = 2,
                 });
@@ -144,12 +142,12 @@ namespace RodSteward
                         StartX = (float)(offset_x),
                         EndX = (float)(offset_x),
                         StartY = (float)(offset_y),
-                        EndY = (float)(offset_y + radius * 2),
+                        EndY = (float)(offset_y + model.Radius * 2),
                         Stroke = new SvgColourServer(System.Drawing.Color.Red),
                         StrokeWidth = 2,
                     });
                 }
-                offset_y += radius * 2 + ROD_PADDING;
+                offset_y += model.Radius * 2 + ROD_PADDING;
             }
 
             using (FileStream fs = File.Create(Path.Combine(dir, "RS_Laser_Cut_Plan.svg")))

@@ -73,6 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Lines2Graph.cs" />
+    <Compile Include="Model.cs" />
     <Compile Include="OutputRodCutSVG.cs" />
     <Compile Include="OutputJointSTL.cs" />
     <Compile Include="Mesh2Graph.cs" />
