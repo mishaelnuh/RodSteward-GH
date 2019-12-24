@@ -57,6 +57,9 @@ namespace RodSteward
 
         public override void DrawViewportMeshes(IGH_PreviewArgs args)
         {
+            if (model == null)
+                return;
+
             var errorMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Red, 0.3);
             var rodMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.BurlyWood, 0.3);
             var jointMaterial = new Rhino.Display.DisplayMaterial(System.Drawing.Color.Black, 0.3);
