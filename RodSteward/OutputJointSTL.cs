@@ -29,7 +29,7 @@ namespace RodSteward
 
         protected override void RegisterInputParams(GH_InputParamManager pManager)
         {
-            pManager.AddMeshParameter("Joint", "J", "Joint meshes from Generator component", GH_ParamAccess.tree);
+            pManager.AddGenericParameter("Model", "M", "Model object", GH_ParamAccess.item);
             pManager.AddTextParameter("Directory", "D", "Output directory", GH_ParamAccess.item);
             pManager.AddBooleanParameter("Write Trigger", "T", "Triggers output", GH_ParamAccess.item);
         }
@@ -41,11 +41,11 @@ namespace RodSteward
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            GH_Structure<GH_Mesh> data = new GH_Structure<GH_Mesh>();
+            Model model = new Model();
             string dir = null;
             bool trigger = false;
 
-            if (!DA.GetDataTree(0, out data)) { return; }
+            if (!DA.GetData(0, ref model)) { return; }
             if (!DA.GetData(1, ref dir)) { return; }
             if (!DA.GetData(2, ref trigger)) { return; }
 
@@ -54,8 +54,7 @@ namespace RodSteward
                 return;
             }
 
-            if (data == null) { return; }
-            if (data.PathCount == 0) { return; }
+            if (model == null) { return; }
 
             if (!Directory.Exists(dir))
             {
@@ -69,15 +68,17 @@ namespace RodSteward
                 File.Delete(file);
 
             int fileCounter = 0;
-            for(int i = 0; i < data.Branches.Count(); i++)
+
+            foreach(var kvp in model.JointMeshes)
             {
                 var stlFile = new StlFile();
-                stlFile.SolidName = "RS_Joint_Mesh_" + i.ToString();
-                foreach(var m in data.Branches[i])
+                stlFile.SolidName = "RS_Joint_Mesh_" + kvp.Key.ToString();
+
+                foreach(var m in kvp.Value)
                 {
-                    var vertices = m.Value.Vertices.Select(v => new StlVertex(v.X, v.Y, v.Z)).ToList();
-                    var faces = m.Value.Faces;
-                    var normals = m.Value.FaceNormals.Select(n => new StlNormal(n.X, n.Y, n.Z)).ToList();
+                    var vertices = m.Vertices.Select(v => new StlVertex(v.X, v.Y, v.Z)).ToList();
+                    var faces = m.Faces;
+                    var normals = m.FaceNormals.Select(n => new StlNormal(n.X, n.Y, n.Z)).ToList();
 
                     for(int f = 0; f < faces.Count(); f++)
                     {
