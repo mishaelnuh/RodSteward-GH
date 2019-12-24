@@ -207,7 +207,6 @@ namespace RodSteward
             return offsets;
         }
 
-
         private Tuple<Dictionary<Tuple<int, int>, Mesh>, Dictionary<Tuple<int, int>, Curve>> GetRodMeshes(List<Tuple<int, int>> edges,
             List<Point3d> vertices, Dictionary<Tuple<int, int>, double> offsets, double radius, int sides)
         {
@@ -341,7 +340,19 @@ namespace RodSteward
 
             if (SkipMeshBoolean)
             {
-                jointMeshes = separateJointMeshes;
+                foreach (KeyValuePair<int, List<Mesh>> kvp in separateJointMeshes)
+                {
+                    if (kvp.Value.Count > 0)
+                    {
+                        var mesh = kvp.Value.First();
+                        foreach (var m in kvp.Value.Skip(1))
+                        {
+                            mesh.Append(m);
+                        }
+                        mesh.Weld(DocumentAngleTolerance());
+                        jointMeshes[kvp.Key] = new List<Mesh>() { mesh };
+                    }
+                }
             }
             else
             {
