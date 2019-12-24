@@ -399,6 +399,9 @@ namespace RodSteward
             {
                 for (int j = i + 1; j < rodKeys.Count; j++)
                 {
+                    if (clashedRods.Contains(rodKeys[i]) && clashedRods.Contains(rodKeys[j]))
+                        continue;
+
                     var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshFast(rodVals[i], rodVals[j]);
                     if (intersect != null && intersect.Length > 0)
                     {
@@ -410,6 +413,9 @@ namespace RodSteward
                 for (int j = 0; j < jointKeys.Count; j++)
                 {
                     if (rodKeys[i].Item1 == jointKeys[j] || rodKeys[i].Item2 == jointKeys[j])
+                        continue;
+
+                    if (clashedRods.Contains(rodKeys[i]) && clashedJoints.Contains(jointKeys[j]))
                         continue;
 
                     foreach (var jv in jointVals[j])
@@ -430,6 +436,9 @@ namespace RodSteward
             {
                 for (int j = i + 1; j < jointKeys.Count; j++)
                 {
+                    if (clashedJoints.Contains(jointKeys[i]) && clashedJoints.Contains(jointKeys[j]))
+                        continue;
+
                     foreach (var iv in jointVals[i])
                     {
                         foreach (var jv in jointVals[j])
