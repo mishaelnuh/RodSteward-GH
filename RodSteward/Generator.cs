@@ -253,6 +253,8 @@ namespace RodSteward
             var jointMeshes = new Dictionary<int, List<Mesh>>();
             var separateJointMeshes = new Dictionary<int, List<Mesh>>();
 
+            var jointArmCounter = new Dictionary<int, int>();
+
             var jointCorePoints = new Dictionary<int, List<double[]>>();
             
             double jointRadius = radius + jointThickness + tolerance;
@@ -262,6 +264,7 @@ namespace RodSteward
             {
                 separateJointMeshes[v] = new List<Mesh>();
                 jointCorePoints[v] = new List<double[]>();
+                jointArmCounter[v] = 1;
             }
 
             foreach(Tuple<int, int> e in edges)
@@ -316,6 +319,18 @@ namespace RodSteward
 
                 separateJointMeshes[e.Item1].Add(startMesh);
                 separateJointMeshes[e.Item2].Add(endMesh);
+
+                // Create joint label
+                var startLabel = CreateJointArmLabel(vertices[e.Item1], vector, e.Item1.ToString() + ((char)(jointArmCounter[e.Item1] + 64)).ToString(), startCurve.GetLength(), innerRadius, jointRadius, sides);
+                var endLabel = CreateJointArmLabel(vertices[e.Item2], vector, e.Item2.ToString() + ((char)(jointArmCounter[e.Item2] + 64)).ToString(), -endCurve.GetLength(), innerRadius, jointRadius, sides);
+                
+                jointArmCounter[e.Item1]++;
+                jointArmCounter[e.Item2]++;
+
+                if (startLabel != null)
+                    separateJointMeshes[e.Item1].Add(startLabel);
+                if (endLabel != null)
+                    separateJointMeshes[e.Item2].Add(endLabel);
             }
 
             foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
@@ -528,6 +543,69 @@ namespace RodSteward
             mesh.Normals.ComputeNormals();
 
             return mesh;
+        }
+
+        private Mesh CreateJointArmLabel(Point3d origin, Vector3d direction, string label, double length, double radius, double jointRadius, int sides)
+        {
+            Polyline innerPoly;
+            var innerProfile = GetProfile(radius, sides, direction);
+            innerProfile.TryGetPolyline(out innerPoly);
+
+            var pSideMid = (innerPoly[1] + innerPoly[0]) / 2 + origin;
+
+            Vector3d dir1 = length < 0 ? direction : -direction;
+            Vector3d dir3 = pSideMid - origin;
+            Vector3d dir2 = Vector3d.CrossProduct(dir3, dir1);
+            dir1.Unitize();
+            dir2.Unitize();
+            dir3.Unitize();
+
+            var textHeight = Math.Sqrt(jointRadius * jointRadius - radius * radius) / 1.5;
+            var embossHeight = (jointRadius - radius) * 1.2;
+
+            Vector3d startTextOffset = (length < 0 ? -direction : direction) * (Math.Abs(length) - (jointRadius - radius));
+
+            Point3d planeOrigin = Point3d.Add(origin, startTextOffset);
+            planeOrigin = Point3d.Add(planeOrigin, dir3 * (pSideMid - origin).Length);
+
+            var plane = new Plane(planeOrigin, dir1, dir2);
+            plane.UpdateEquation();
+
+            var style = new Rhino.DocObjects.DimensionStyle();
+            style.TextHorizontalAlignment = Rhino.DocObjects.TextHorizontalAlignment.Left;
+            style.TextVerticalAlignment = Rhino.DocObjects.TextVerticalAlignment.Middle;
+            style.TextHeight = textHeight;
+            var prefFont = Rhino.DocObjects.Font.InstalledFonts("Lucida Console");
+            if (prefFont.Length > 0)
+                style.Font = prefFont.First();
+
+            var writingPlane = new Plane(planeOrigin, new Vector3d(0, 0, 1)); // Must write to flat plane for some reason
+
+            TextEntity textEnt = TextEntity.Create(label, writingPlane, style, false, Math.Abs(length), 0);
+            textEnt.SetBold(true);
+
+            var meshes = textEnt.CreateExtrusions(style, embossHeight)
+                .Where(b => b != null)
+                .SelectMany(b => Mesh.CreateFromBrep(b.ToBrep(), MeshingParameters.FastRenderMesh));
+
+            var trans = Transform.PlaneToPlane(writingPlane, plane);
+
+            if (meshes.Count() > 0)
+            {
+                var mesh = meshes.First();
+                foreach (var m in meshes.Skip(1))
+                {
+                    mesh.Append(m);
+                }
+                mesh.Weld(DocumentAngleTolerance());
+                mesh.Normals.ComputeNormals();
+                mesh.UnifyNormals();
+                mesh.Normals.ComputeNormals();
+                mesh.Transform(trans);
+                return mesh;
+            }
+
+            return null;
         }
 
         protected override System.Drawing.Bitmap Icon
