@@ -63,6 +63,7 @@ namespace RodSteward
             ((IGH_PreviewObject)pManager[2]).Hidden = true;
             ((IGH_PreviewObject)pManager[3]).Hidden = true;
         }
+        
         public override bool Write(GH_IWriter writer)
         {
             try
@@ -96,6 +97,7 @@ namespace RodSteward
             }
             return base.Read(reader);
         }
+        
         public override void DrawViewportMeshes(IGH_PreviewArgs args)
         {
             if (model == null)
@@ -148,8 +150,9 @@ namespace RodSteward
             model.JointLength = jointLength;
             model.Tolerance = tolerance;
 
-            model.Generate();
-            model.CalculateClashes();
+            model.Generate(PrintLabel);
+            if (Collision)
+                model.CalculateClashes();
 
             DA.SetData(0, model);
             DA.SetDataTree(1, model.JointMeshTree);
@@ -189,7 +192,7 @@ namespace RodSteward
                 System.Drawing.Rectangle rec = rec0;
                 rec.Y = rec.Bottom - 22 * (numCapsules - i);
                 rec.Height = capsuleHeight;
-                rec.Inflate(-2, -2);
+                rec.Inflate(0, -2);
                 CapsuleBounds.Add(rec);
             }
 
@@ -205,7 +208,7 @@ namespace RodSteward
                 var component = Owner as Generator;
 
                 // Options
-                var optionTitle = GH_Capsule.CreateTextCapsule(CapsuleBounds[0], CapsuleBounds[0], GH_Palette.Normal, "Options", 0, 1);
+                var optionTitle = GH_Capsule.CreateTextCapsule(CapsuleBounds[0], CapsuleBounds[0], GH_Palette.Grey, "Options", 0, 1);
                 graphics.DrawString((component.PrintLabel ? "☒" : "☐") + " Print label", optionTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[1].Location);
                 graphics.DrawString((component.Collision ? "☒" : "☐") + " Collision", optionTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[2].Location);
 
@@ -213,7 +216,7 @@ namespace RodSteward
                 optionTitle.Dispose();
 
                 // Annotation
-                var annotationTitle = GH_Capsule.CreateTextCapsule(CapsuleBounds[3], CapsuleBounds[3], GH_Palette.Normal, "Annotation", 0, 1);
+                var annotationTitle = GH_Capsule.CreateTextCapsule(CapsuleBounds[3], CapsuleBounds[3], GH_Palette.Grey, "Annotation", 0, 1);
                 graphics.DrawString((component.AnnotateRods ? "☒" : "☐") + " Rods", annotationTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[4].Location);
                 graphics.DrawString((component.AnnotateJoints ? "☒" : "☐") + " Joints", annotationTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[5].Location);
                 graphics.DrawString((component.AnnotateJointArms ? "☒" : "☐") + " Joint arms", annotationTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[6].Location);

@@ -56,11 +56,11 @@ namespace RodSteward
             ClashedJoints = new List<int>();
         }
 
-        public void Generate()
+        public void Generate(bool label = true)
         {
             CalculateRodOffsets();
             GenerateRodMeshes();
-            GenerateJointMeshes();
+            GenerateJointMeshes(label);
         }
 
         public Dictionary<Tuple<int, int>, double> CalculateRodOffsets()
@@ -260,7 +260,7 @@ namespace RodSteward
             return RodMeshes;
         }
 
-        public Dictionary<int, List<Mesh>> GenerateJointMeshes()
+        public Dictionary<int, List<Mesh>> GenerateJointMeshes(bool label = true)
         {
             var separateJointMeshes = new Dictionary<int, List<Mesh>>();
 
@@ -326,17 +326,20 @@ namespace RodSteward
                 separateJointMeshes[e.Item1].Add(startMesh);
                 separateJointMeshes[e.Item2].Add(endMesh);
 
-                // Create joint label
-                var startLabel = GenerateJointArmLabel(Vertices[e.Item1], vector, e.Item1.ToString() + ((char)(jointArmCounter[e.Item1] + 64)).ToString(), startCurve.GetLength());
-                var endLabel = GenerateJointArmLabel(Vertices[e.Item2], vector, e.Item2.ToString() + ((char)(jointArmCounter[e.Item2] + 64)).ToString(), -endCurve.GetLength());
+                if (label)
+                {
+                    // Create joint label
+                    var startLabel = GenerateJointArmLabel(Vertices[e.Item1], vector, e.Item1.ToString() + ((char)(jointArmCounter[e.Item1] + 64)).ToString(), startCurve.GetLength());
+                    var endLabel = GenerateJointArmLabel(Vertices[e.Item2], vector, e.Item2.ToString() + ((char)(jointArmCounter[e.Item2] + 64)).ToString(), -endCurve.GetLength());
 
-                jointArmCounter[e.Item1]++;
-                jointArmCounter[e.Item2]++;
+                    jointArmCounter[e.Item1]++;
+                    jointArmCounter[e.Item2]++;
 
-                if (startLabel != null)
-                    separateJointMeshes[e.Item1].Add(startLabel);
-                if (endLabel != null)
-                    separateJointMeshes[e.Item2].Add(endLabel);
+                    if (startLabel != null)
+                        separateJointMeshes[e.Item1].Add(startLabel);
+                    if (endLabel != null)
+                        separateJointMeshes[e.Item2].Add(endLabel);
+                }
             }
 
             foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
