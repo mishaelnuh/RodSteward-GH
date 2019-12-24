@@ -373,7 +373,7 @@ namespace RodSteward
             {
                 for (int j = i + 1; j < rodKeys.Count; j++)
                 {
-                    var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshAccurate(rodVals[i], rodVals[j], DocumentTolerance());
+                    var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshFast(rodVals[i], rodVals[j]);
                     if (intersect != null && intersect.Length > 0)
                     {
                         clashedRods.Add(rodKeys[i]);
@@ -388,7 +388,7 @@ namespace RodSteward
 
                     foreach (var jv in jointVals[j])
                     {
-                        var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshAccurate(rodVals[i], jv, DocumentTolerance());
+                        var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshFast(rodVals[i], jv);
                         if (intersect != null && intersect.Length > 0)
                         {
                             clashedRods.Add(rodKeys[i]);
@@ -408,7 +408,7 @@ namespace RodSteward
                     {
                         foreach (var jv in jointVals[j])
                         {
-                            var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshAccurate(iv, jv, DocumentTolerance());
+                            var intersect = Rhino.Geometry.Intersect.Intersection.MeshMeshFast(iv, jv);
                             if (intersect != null && intersect.Length > 0)
                             {
                                 clashedJoints.Add(jointKeys[i]);
