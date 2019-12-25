@@ -15,7 +15,7 @@ namespace RodSteward
         private List<Tuple<char, int>> orderedParts = new List<Tuple<char, int>>();
         private List<int> traversedEdges = new List<int>();
         private List<int> traversedVertices = new List<int>();
-        private Queue<int> vertexQueue = new Queue<int>();
+        private List<int> vertexQueue = new List<int>();
 
         public bool AnnotateRods = true;
         public bool AnnotateJoints = true;
@@ -216,12 +216,17 @@ namespace RodSteward
                     if (orderedParts.Count() > target)
                         return;
 
-                    vertexQueue.Enqueue(nextVertex);
+                    vertexQueue.Add(nextVertex);
                 }
             }
 
             if (vertexQueue.Count() > 0)
-                SearchFromVertex(vertexQueue.Dequeue(), target);
+            {
+                vertexQueue = vertexQueue.OrderBy(v => model.Vertices[v].Z).ToList();
+                var next = vertexQueue.First();
+                vertexQueue.RemoveAt(0);
+                SearchFromVertex(next, target);
+            }
         }
     }
 
