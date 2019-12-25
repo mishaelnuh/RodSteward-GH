@@ -103,6 +103,16 @@ namespace RodSteward.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap sequencer {
+            get {
+                object obj = ResourceManager.GetObject("sequencer", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap stl {
             get {
                 object obj = ResourceManager.GetObject("stl", resourceCulture);

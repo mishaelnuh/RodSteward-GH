@@ -1,14 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;x
-using Grasshopper;
+using System.Linq;
 using Grasshopper.Kernel;
 using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
-using Rhino.Geometry;
 using GH_IO.Serialization;
-using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
 
 namespace RodSteward
 {
@@ -187,7 +183,7 @@ namespace RodSteward
         {
             get
             {
-                return Properties.Resources.generator;
+                return Properties.Resources.sequencer;
             }
         }
 
