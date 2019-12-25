@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Grasshopper;
 using Grasshopper.Kernel;
 using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
@@ -13,8 +14,9 @@ namespace RodSteward
 {
     public class Generator : GH_Component
     {
-        private Model model;
+        private Model model = new Model();
 
+        public bool ForceRecalc = false;
         public bool PrintLabel = false;
         public bool Collision = false;
         public bool AnnotateRods = false;
@@ -119,6 +121,40 @@ namespace RodSteward
             }
         }
 
+        public override void DrawViewportWires(IGH_PreviewArgs args)
+        {
+            if (model == null)
+                return;
+
+            if (AnnotateRods)
+            {
+                foreach (var r in model.RodCentrelines.Values)
+                {
+                    var midPoint = r.PointAtNormalizedLength(0.5);
+                    var lengthString = String.Format("{0:F2}", r.GetLength());
+
+                    args.Display.Draw2dText(lengthString, System.Drawing.Color.Blue, midPoint, false, 20, "Lucida Console");
+                }
+            }
+
+            if (AnnotateJoints)
+            {
+                int counter = 0;
+                foreach(var v in model.Vertices)
+                {
+                    args.Display.Draw2dText((counter++).ToString(), System.Drawing.Color.Orange, v, false, 20, "Lucida Console");
+                }
+            }
+
+            if (AnnotateJointArms)
+            {
+                foreach (var kvp in model.JointArmLabel)
+                {
+                    args.Display.Draw2dText(kvp.Key, System.Drawing.Color.Green, kvp.Value, false, 20, "Lucida Console");
+                }
+            }
+        }
+
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             List<Tuple<int, int>> edges = new List<Tuple<int, int>>();
@@ -129,28 +165,38 @@ namespace RodSteward
             double jointLength = 0;
             double tolerance = 0;
 
-            model = new Model();
-
             if (!DA.GetDataList(0, edges)) { return; }
             if (!DA.GetDataList(1, vertices)) { return; }
-            if (!DA.GetData(2, ref sides)) { sides = model.Sides; }
-            if (!DA.GetData(3, ref radius)) { radius = model.Radius; }
-            if (!DA.GetData(4, ref jointThickness)) { jointThickness = model.JointThickness; }
-            if (!DA.GetData(5, ref jointLength)) { jointLength = model.JointLength; }
-            if (!DA.GetData(6, ref tolerance)) { tolerance = model.Tolerance; }
+            if (!DA.GetData(2, ref sides)) { sides = 50; }
+            if (!DA.GetData(3, ref radius)) { radius = 6.35; }
+            if (!DA.GetData(4, ref jointThickness)) { jointThickness = 3.0; }
+            if (!DA.GetData(5, ref jointLength)) { jointLength = 38; }
+            if (!DA.GetData(6, ref tolerance)) { tolerance = 0.1; }
 
             if (edges == null || vertices == null) { return; }
             if (radius <= 0 || sides <= 2 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
 
-            model.Edges = edges;
-            model.Vertices = vertices;
-            model.Sides = (int)Math.Floor(sides);
-            model.Radius = radius;
-            model.JointThickness = jointThickness;
-            model.JointLength = jointLength;
-            model.Tolerance = tolerance;
+            if (ForceRecalc || !(model.Edges.SequenceEqual(edges) &&
+                model.Vertices.SequenceEqual(vertices) &&
+                model.Sides == (int)Math.Floor(sides) &&
+                model.Radius == radius &&
+                model.JointThickness == jointThickness &&
+                model.JointLength == jointLength &&
+                model.Tolerance == tolerance))
+            {
+                ForceRecalc = false;
 
-            model.Generate(PrintLabel);
+                model.Edges = edges;
+                model.Vertices = vertices;
+                model.Sides = (int)Math.Floor(sides);
+                model.Radius = radius;
+                model.JointThickness = jointThickness;
+                model.JointLength = jointLength;
+                model.Tolerance = tolerance;
+
+                model.Generate(PrintLabel);
+            }
+
             if (Collision)
                 model.CalculateClashes();
 
@@ -234,6 +280,7 @@ namespace RodSteward
                 if (((System.Drawing.RectangleF)CapsuleBounds[1]).Contains(e.CanvasLocation))
                 {
                     component.PrintLabel = !component.PrintLabel;
+                    component.ForceRecalc = true;
                     component.ExpireSolution(true);
                     return GH_ObjectResponse.Handled;
                 }

@@ -44,6 +44,8 @@ namespace RodSteward
         public List<Tuple<int, int>> ClashedRods { get; set; }
         public List<int> ClashedJoints { get; set; }
 
+        public Dictionary<string, Point3d> JointArmLabel { get; set; }
+
         public Model()
         {
             Edges = new List<Tuple<int, int>>();
@@ -54,10 +56,14 @@ namespace RodSteward
             JointMeshes = new Dictionary<int, List<Mesh>>();
             ClashedRods = new List<Tuple<int, int>>();
             ClashedJoints = new List<int>();
+            JointArmLabel = new Dictionary<string, Point3d>();
         }
 
         public void Generate(bool label = true)
         {
+            ClashedJoints.Clear();
+            ClashedRods.Clear();
+
             CalculateRodOffsets();
             GenerateRodMeshes();
             GenerateJointMeshes(label);
@@ -262,6 +268,9 @@ namespace RodSteward
 
         public Dictionary<int, List<Mesh>> GenerateJointMeshes(bool label = true)
         {
+            JointMeshes.Clear();
+            JointArmLabel.Clear();
+
             var separateJointMeshes = new Dictionary<int, List<Mesh>>();
 
             var jointArmCounter = new Dictionary<int, int>();
@@ -491,6 +500,8 @@ namespace RodSteward
 
             Point3d planeOrigin = Point3d.Add(origin, startTextOffset);
             planeOrigin = Point3d.Add(planeOrigin, dir3 * (pSideMid - origin).Length);
+
+            JointArmLabel[label] = planeOrigin;
 
             var plane = new Plane(planeOrigin, dir1, dir2);
             plane.UpdateEquation();
