@@ -5,6 +5,9 @@ using Grasshopper.Kernel;
 using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using GH_IO.Serialization;
+using Grasshopper.Kernel.Parameters;
+using Grasshopper.Kernel.Types;
+using System.Text.RegularExpressions;
 
 namespace RodSteward
 {
@@ -15,7 +18,7 @@ namespace RodSteward
         private List<Tuple<char, int>> orderedParts = new List<Tuple<char, int>>();
         private List<int> traversedEdges = new List<int>();
         private List<int> traversedVertices = new List<int>();
-        private Queue<int> vertexQueue = new Queue<int>();
+        private List<int> vertexQueue = new List<int>();
 
         public bool AnnotateRods = true;
         public bool AnnotateJoints = true;
@@ -39,6 +42,8 @@ namespace RodSteward
             pManager.AddGenericParameter("Model", "M", "Model object", GH_ParamAccess.item);
             pManager.AddNumberParameter("Starting Joint", "SJ", "First joint to add", GH_ParamAccess.item);
             pManager.AddNumberParameter("Part Number", "PN", "Part number to add", GH_ParamAccess.item);
+
+            ((Param_Number)pManager[1]).PersistentData.Append(new GH_Number(-1));
         }
 
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -124,10 +129,11 @@ namespace RodSteward
 
                 if (AnnotateJoints)
                     args.Display.Draw2dText(lastPart.Item2.ToString(), System.Drawing.Color.Orange, v, false, 20, "Lucida Console");
-
+                    
                 if (AnnotateJointArms)
                 {
-                    var armLabels = model.JointArmLabel.Where(j => j.Key.StartsWith(lastPart.Item2.ToString()));
+                    var armLabels = model.JointArmLabel
+                        .Where(j => Regex.IsMatch(j.Key, "^" + lastPart.Item2.ToString() + "[A-Z]", RegexOptions.IgnoreCase));
 
                     foreach (var kvp in armLabels)
                     {
@@ -156,26 +162,25 @@ namespace RodSteward
             traversedVertices.Clear();
             vertexQueue.Clear();
 
-            if (startFloored < 0 || startFloored >= model.Vertices.Count()) { return; }
-            if (numFloored < 0) { return; }
-
-            if (numFloored >= 0)
+            if (startFloored < 0 || startFloored >= model.Vertices.Count())
             {
-                orderedParts.Add(Tuple.Create('V', startFloored));
-                traversedVertices.Add(startFloored);
-                SearchFromVertex(startFloored, numFloored);
+                var minZ = model.Vertices.Min(v => v.Z);
+                startFloored = model.Vertices.FindIndex(v => v.Z == minZ);
             }
 
-            if (orderedParts.Count() > 0)
+            numFloored = Math.Max(0, numFloored);
+
+            orderedParts.Add(Tuple.Create('V', startFloored));
+            traversedVertices.Add(startFloored);
+            SearchFromVertex(startFloored, numFloored);
+
+            if (orderedParts.Last().Item1 == 'E')
             {
-                if (orderedParts.Last().Item1 == 'E')
-                {
-                    DA.SetData(0, "Rod: " + String.Format("{0:F2}", model.RodCentrelines[model.Edges[orderedParts.Last().Item2]].GetLength()));
-                }
-                else
-                {
-                    DA.SetData(0, "Joint: " + orderedParts.Last().Item2.ToString());
-                }
+                DA.SetData(0, "Rod: " + String.Format("{0:F2}", model.RodCentrelines[model.Edges[orderedParts.Last().Item2]].GetLength()));
+            }
+            else
+            {
+                DA.SetData(0, "Joint: " + orderedParts.Last().Item2.ToString());
             }
         }
 
@@ -196,17 +201,22 @@ namespace RodSteward
                 .Where(e => e.Item1 == vertex || e.Item2 == vertex)
                 .Select(e => model.Edges.IndexOf(e))
                 .Where(i => !traversedEdges.Contains(i))
+                .OrderBy(i =>
+                {
+                    var nextVertex = model.Edges[i].Item1 == vertex ? model.Edges[i].Item2 : model.Edges[i].Item1;
+                    return model.Vertices[nextVertex].Z;
+                })
                 .ToList();
 
             foreach(var e in nextEdgeIndices)
             {
+                var nextVertex = model.Edges[e].Item1 == vertex ? model.Edges[e].Item2 : model.Edges[e].Item1;
+
                 orderedParts.Add(Tuple.Create('E', e));
                 traversedEdges.Add(e);
 
                 if (orderedParts.Count() > target)
                     return;
-
-                var nextVertex = model.Edges[e].Item1 == vertex ? model.Edges[e].Item2 : model.Edges[e].Item1;
 
                 if (!traversedVertices.Contains(nextVertex))
                 {
@@ -216,12 +226,32 @@ namespace RodSteward
                     if (orderedParts.Count() > target)
                         return;
 
-                    vertexQueue.Enqueue(nextVertex);
+                    var immediateConnectEdges = model.Edges
+                        .Where(ei => traversedVertices.Contains(ei.Item1) && traversedVertices.Contains(ei.Item2))
+                        .Select(ei => model.Edges.IndexOf(ei))
+                        .Where(i => !traversedEdges.Contains(i))
+                        .ToList();
+
+                    foreach (var ei in immediateConnectEdges)
+                    {
+                        orderedParts.Add(Tuple.Create('E', ei));
+                        traversedEdges.Add(ei);
+
+                        if (orderedParts.Count() > target)
+                            return;
+                    }
+
+                    vertexQueue.Add(nextVertex);
                 }
             }
 
             if (vertexQueue.Count() > 0)
-                SearchFromVertex(vertexQueue.Dequeue(), target);
+            {
+                vertexQueue = vertexQueue.OrderBy(v => model.Vertices[v].Z).ToList();
+                var next = vertexQueue.First();
+                vertexQueue.RemoveAt(0);
+                SearchFromVertex(next, target);
+            }
         }
     }
 

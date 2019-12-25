@@ -6,6 +6,8 @@ using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using GH_IO.Serialization;
+using Grasshopper.Kernel.Parameters;
+using Grasshopper.Kernel.Types;
 
 namespace RodSteward
 {
@@ -43,11 +45,11 @@ namespace RodSteward
             pManager.AddNumberParameter("Joint Length", "JL", "Thickness of Joint", GH_ParamAccess.item);
             pManager.AddNumberParameter("Tolerance", "e", "Tolerance", GH_ParamAccess.item);
 
-            pManager[2].Optional = true;
-            pManager[3].Optional = true;
-            pManager[4].Optional = true;
-            pManager[5].Optional = true;
-            pManager[6].Optional = true;
+            ((Param_Number)pManager[2]).PersistentData.Append(new GH_Number(50));
+            ((Param_Number)pManager[3]).PersistentData.Append(new GH_Number(6.35));
+            ((Param_Number)pManager[4]).PersistentData.Append(new GH_Number(3));
+            ((Param_Number)pManager[5]).PersistentData.Append(new GH_Number(38));
+            ((Param_Number)pManager[6]).PersistentData.Append(new GH_Number(0.1));
         }
 
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -164,11 +166,11 @@ namespace RodSteward
 
             if (!DA.GetDataList(0, edges)) { return; }
             if (!DA.GetDataList(1, vertices)) { return; }
-            if (!DA.GetData(2, ref sides)) { sides = 50; }
-            if (!DA.GetData(3, ref radius)) { radius = 6.35; }
-            if (!DA.GetData(4, ref jointThickness)) { jointThickness = 3.0; }
-            if (!DA.GetData(5, ref jointLength)) { jointLength = 38; }
-            if (!DA.GetData(6, ref tolerance)) { tolerance = 0.1; }
+            if (!DA.GetData(2, ref sides)) { return; }
+            if (!DA.GetData(3, ref radius)) { return; }
+            if (!DA.GetData(4, ref jointThickness)) { return; }
+            if (!DA.GetData(5, ref jointLength)) { return; }
+            if (!DA.GetData(6, ref tolerance)) { return; }
 
             if (edges == null || vertices == null) { return; }
             if (radius <= 0 || sides <= 2 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
