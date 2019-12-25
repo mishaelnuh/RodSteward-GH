@@ -1,16 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Grasshopper;
 using Grasshopper.Kernel;
 using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
+using GH_IO.Serialization;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
 
 namespace RodSteward
 {
     public class Generator : GH_Component
     {
-        private Model model;
+        private Model model = new Model();
+
+        public bool ForceRecalc = false;
+        public bool PrintLabel = false;
+        public bool Collision = false;
+        public bool AnnotateRods = false;
+        public bool AnnotateJoints = false;
+        public bool AnnotateJointArms = false;
 
         public Generator()
           : base("Generator", "RSGenerator",
@@ -54,7 +65,41 @@ namespace RodSteward
             ((IGH_PreviewObject)pManager[2]).Hidden = true;
             ((IGH_PreviewObject)pManager[3]).Hidden = true;
         }
+        
+        public override bool Write(GH_IWriter writer)
+        {
+            try
+            {
+                writer.SetBoolean("printlabel", PrintLabel);
+                writer.SetBoolean("collision", Collision);
+                writer.SetBoolean("annotaterods", AnnotateRods);
+                writer.SetBoolean("annotatejoints", AnnotateJoints);
+                writer.SetBoolean("annotatejointarms", AnnotateJointArms);
+            }
+            catch (Exception err)
+            {
+                throw err;
+            }
+            return base.Write(writer);
+        }
 
+        public override bool Read(GH_IReader reader)
+        {
+            try
+            {
+                reader.TryGetBoolean("printlabel", ref PrintLabel);
+                reader.TryGetBoolean("collision", ref Collision);
+                reader.TryGetBoolean("annotaterods", ref AnnotateRods);
+                reader.TryGetBoolean("annotatejoints", ref AnnotateJoints);
+                reader.TryGetBoolean("annotatejointarms", ref AnnotateJointArms);
+            }
+            catch (Exception err)
+            {
+                throw err;
+            }
+            return base.Read(reader);
+        }
+        
         public override void DrawViewportMeshes(IGH_PreviewArgs args)
         {
             if (model == null)
@@ -76,6 +121,40 @@ namespace RodSteward
             }
         }
 
+        public override void DrawViewportWires(IGH_PreviewArgs args)
+        {
+            if (model == null)
+                return;
+
+            if (AnnotateRods)
+            {
+                foreach (var r in model.RodCentrelines.Values)
+                {
+                    var midPoint = r.PointAtNormalizedLength(0.5);
+                    var lengthString = String.Format("{0:F2}", r.GetLength());
+
+                    args.Display.Draw2dText(lengthString, System.Drawing.Color.Blue, midPoint, false, 20, "Lucida Console");
+                }
+            }
+
+            if (AnnotateJoints)
+            {
+                int counter = 0;
+                foreach(var v in model.Vertices)
+                {
+                    args.Display.Draw2dText((counter++).ToString(), System.Drawing.Color.Orange, v, false, 20, "Lucida Console");
+                }
+            }
+
+            if (AnnotateJointArms)
+            {
+                foreach (var kvp in model.JointArmLabel)
+                {
+                    args.Display.Draw2dText(kvp.Key, System.Drawing.Color.Green, kvp.Value, false, 20, "Lucida Console");
+                }
+            }
+        }
+
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             List<Tuple<int, int>> edges = new List<Tuple<int, int>>();
@@ -86,29 +165,40 @@ namespace RodSteward
             double jointLength = 0;
             double tolerance = 0;
 
-            model = new Model();
-
             if (!DA.GetDataList(0, edges)) { return; }
             if (!DA.GetDataList(1, vertices)) { return; }
-            if (!DA.GetData(2, ref sides)) { sides = model.Sides; }
-            if (!DA.GetData(3, ref radius)) { radius = model.Radius; }
-            if (!DA.GetData(4, ref jointThickness)) { jointThickness = model.JointThickness; }
-            if (!DA.GetData(5, ref jointLength)) { jointLength = model.JointLength; }
-            if (!DA.GetData(6, ref tolerance)) { tolerance = model.Tolerance; }
+            if (!DA.GetData(2, ref sides)) { sides = 50; }
+            if (!DA.GetData(3, ref radius)) { radius = 6.35; }
+            if (!DA.GetData(4, ref jointThickness)) { jointThickness = 3.0; }
+            if (!DA.GetData(5, ref jointLength)) { jointLength = 38; }
+            if (!DA.GetData(6, ref tolerance)) { tolerance = 0.1; }
 
             if (edges == null || vertices == null) { return; }
             if (radius <= 0 || sides <= 2 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
 
-            model.Edges = edges;
-            model.Vertices = vertices;
-            model.Sides = (int)Math.Floor(sides);
-            model.Radius = radius;
-            model.JointThickness = jointThickness;
-            model.JointLength = jointLength;
-            model.Tolerance = tolerance;
+            if (ForceRecalc || !(model.Edges.SequenceEqual(edges) &&
+                model.Vertices.SequenceEqual(vertices) &&
+                model.Sides == (int)Math.Floor(sides) &&
+                model.Radius == radius &&
+                model.JointThickness == jointThickness &&
+                model.JointLength == jointLength &&
+                model.Tolerance == tolerance))
+            {
+                ForceRecalc = false;
 
-            model.Generate();
-            model.CalculateClashes();
+                model.Edges = edges;
+                model.Vertices = vertices;
+                model.Sides = (int)Math.Floor(sides);
+                model.Radius = radius;
+                model.JointThickness = jointThickness;
+                model.JointLength = jointLength;
+                model.Tolerance = tolerance;
+
+                model.Generate(PrintLabel);
+            }
+
+            if (Collision)
+                model.CalculateClashes();
 
             DA.SetData(0, model);
             DA.SetDataTree(1, model.JointMeshTree);
@@ -129,17 +219,97 @@ namespace RodSteward
     {
         public GeneratorAttribute(GH_Component owner) : base(owner) { }
 
+        private List<System.Drawing.Rectangle> CapsuleBounds { get; set; }
+
         protected override void Layout()
         {
             base.Layout();
+
+            int numCapsules = 7;
+            int capsuleHeight = 22;
+
+            System.Drawing.Rectangle rec0 = GH_Convert.ToRectangle(Bounds);
+            rec0.Height += 22 * numCapsules;
+
+            CapsuleBounds = new List<System.Drawing.Rectangle>();
+
+            for(int i = 0; i < numCapsules; i++)
+            {
+                System.Drawing.Rectangle rec = rec0;
+                rec.Y = rec.Bottom - 22 * (numCapsules - i);
+                rec.Height = capsuleHeight;
+                rec.Inflate(0, -2);
+                CapsuleBounds.Add(rec);
+            }
+
+            Bounds = rec0;
         }
 
         protected override void Render(GH_Canvas canvas, System.Drawing.Graphics graphics, GH_CanvasChannel channel)
         {
             base.Render(canvas, graphics, channel);
+
+            if (channel == GH_CanvasChannel.Objects)
+            {
+                var component = Owner as Generator;
+
+                // Options
+                var optionTitle = GH_Capsule.CreateTextCapsule(CapsuleBounds[0], CapsuleBounds[0], GH_Palette.Grey, "Options", 0, 1);
+                graphics.DrawString((component.PrintLabel ? "☒" : "☐") + " Print label", optionTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[1].Location);
+                graphics.DrawString((component.Collision ? "☒" : "☐") + " Collision", optionTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[2].Location);
+
+                optionTitle.Render(graphics, Selected, Owner.Locked, false);
+                optionTitle.Dispose();
+
+                // Annotation
+                var annotationTitle = GH_Capsule.CreateTextCapsule(CapsuleBounds[3], CapsuleBounds[3], GH_Palette.Grey, "Annotation", 0, 1);
+                graphics.DrawString((component.AnnotateRods ? "☒" : "☐") + " Rods", annotationTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[4].Location);
+                graphics.DrawString((component.AnnotateJoints ? "☒" : "☐") + " Joints", annotationTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[5].Location);
+                graphics.DrawString((component.AnnotateJointArms ? "☒" : "☐") + " Joint arms", annotationTitle.Font, System.Drawing.Brushes.Black, CapsuleBounds[6].Location);
+
+                annotationTitle.Render(graphics, Selected, Owner.Locked, false);
+                annotationTitle.Dispose();
+            }
         }
         public override GH_ObjectResponse RespondToMouseDown(GH_Canvas sender, GH_CanvasMouseEvent e)
         {
+            if (e.Button == System.Windows.Forms.MouseButtons.Left)
+            {
+                var component = Owner as Generator;
+
+                if (((System.Drawing.RectangleF)CapsuleBounds[1]).Contains(e.CanvasLocation))
+                {
+                    component.PrintLabel = !component.PrintLabel;
+                    component.ForceRecalc = true;
+                    component.ExpireSolution(true);
+                    return GH_ObjectResponse.Handled;
+                }
+                else if (((System.Drawing.RectangleF)CapsuleBounds[2]).Contains(e.CanvasLocation))
+                {
+                    component.Collision = !component.Collision;
+                    component.ExpireSolution(true);
+                    return GH_ObjectResponse.Handled;
+                }
+                else if (((System.Drawing.RectangleF)CapsuleBounds[4]).Contains(e.CanvasLocation))
+                {
+                    component.AnnotateRods = !component.AnnotateRods;
+                    component.ExpireSolution(true);
+                    return GH_ObjectResponse.Handled;
+                }
+                else if (((System.Drawing.RectangleF)CapsuleBounds[5]).Contains(e.CanvasLocation))
+                {
+                    component.AnnotateJoints = !component.AnnotateJoints;
+                    component.ExpireSolution(true);
+                    return GH_ObjectResponse.Handled;
+                }
+                else if (((System.Drawing.RectangleF)CapsuleBounds[6]).Contains(e.CanvasLocation))
+                {
+                    component.AnnotateJointArms = !component.AnnotateJointArms;
+                    component.ExpireSolution(true);
+                    return GH_ObjectResponse.Handled;
+                }
+            }
+
             return base.RespondToMouseDown(sender, e);
         }
     }

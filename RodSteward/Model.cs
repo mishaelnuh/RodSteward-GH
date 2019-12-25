@@ -44,6 +44,8 @@ namespace RodSteward
         public List<Tuple<int, int>> ClashedRods { get; set; }
         public List<int> ClashedJoints { get; set; }
 
+        public Dictionary<string, Point3d> JointArmLabel { get; set; }
+
         public Model()
         {
             Edges = new List<Tuple<int, int>>();
@@ -54,13 +56,17 @@ namespace RodSteward
             JointMeshes = new Dictionary<int, List<Mesh>>();
             ClashedRods = new List<Tuple<int, int>>();
             ClashedJoints = new List<int>();
+            JointArmLabel = new Dictionary<string, Point3d>();
         }
 
-        public void Generate()
+        public void Generate(bool label = true)
         {
+            ClashedJoints.Clear();
+            ClashedRods.Clear();
+
             CalculateRodOffsets();
             GenerateRodMeshes();
-            GenerateJointMeshes();
+            GenerateJointMeshes(label);
         }
 
         public Dictionary<Tuple<int, int>, double> CalculateRodOffsets()
@@ -260,8 +266,11 @@ namespace RodSteward
             return RodMeshes;
         }
 
-        public Dictionary<int, List<Mesh>> GenerateJointMeshes()
+        public Dictionary<int, List<Mesh>> GenerateJointMeshes(bool label = true)
         {
+            JointMeshes.Clear();
+            JointArmLabel.Clear();
+
             var separateJointMeshes = new Dictionary<int, List<Mesh>>();
 
             var jointArmCounter = new Dictionary<int, int>();
@@ -326,17 +335,20 @@ namespace RodSteward
                 separateJointMeshes[e.Item1].Add(startMesh);
                 separateJointMeshes[e.Item2].Add(endMesh);
 
-                // Create joint label
-                var startLabel = GenerateJointArmLabel(Vertices[e.Item1], vector, e.Item1.ToString() + ((char)(jointArmCounter[e.Item1] + 64)).ToString(), startCurve.GetLength());
-                var endLabel = GenerateJointArmLabel(Vertices[e.Item2], vector, e.Item2.ToString() + ((char)(jointArmCounter[e.Item2] + 64)).ToString(), -endCurve.GetLength());
+                if (label)
+                {
+                    // Create joint label
+                    var startLabel = GenerateJointArmLabel(Vertices[e.Item1], vector, e.Item1.ToString() + ((char)(jointArmCounter[e.Item1] + 64)).ToString(), startCurve.GetLength());
+                    var endLabel = GenerateJointArmLabel(Vertices[e.Item2], vector, e.Item2.ToString() + ((char)(jointArmCounter[e.Item2] + 64)).ToString(), -endCurve.GetLength());
 
-                jointArmCounter[e.Item1]++;
-                jointArmCounter[e.Item2]++;
+                    jointArmCounter[e.Item1]++;
+                    jointArmCounter[e.Item2]++;
 
-                if (startLabel != null)
-                    separateJointMeshes[e.Item1].Add(startLabel);
-                if (endLabel != null)
-                    separateJointMeshes[e.Item2].Add(endLabel);
+                    if (startLabel != null)
+                        separateJointMeshes[e.Item1].Add(startLabel);
+                    if (endLabel != null)
+                        separateJointMeshes[e.Item2].Add(endLabel);
+                }
             }
 
             foreach (KeyValuePair<int, List<double[]>> kvp in jointCorePoints)
@@ -488,6 +500,8 @@ namespace RodSteward
 
             Point3d planeOrigin = Point3d.Add(origin, startTextOffset);
             planeOrigin = Point3d.Add(planeOrigin, dir3 * (pSideMid - origin).Length);
+
+            JointArmLabel[label] = planeOrigin;
 
             var plane = new Plane(planeOrigin, dir1, dir2);
             plane.UpdateEquation();
