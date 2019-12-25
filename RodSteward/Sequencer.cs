@@ -7,6 +7,7 @@ using Grasshopper.GUI.Canvas;
 using GH_IO.Serialization;
 using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Types;
+using System.Text.RegularExpressions;
 
 namespace RodSteward
 {
@@ -128,10 +129,11 @@ namespace RodSteward
 
                 if (AnnotateJoints)
                     args.Display.Draw2dText(lastPart.Item2.ToString(), System.Drawing.Color.Orange, v, false, 20, "Lucida Console");
-
+                    
                 if (AnnotateJointArms)
                 {
-                    var armLabels = model.JointArmLabel.Where(j => j.Key.StartsWith(lastPart.Item2.ToString()));
+                    var armLabels = model.JointArmLabel
+                        .Where(j => Regex.IsMatch(j.Key, "^" + lastPart.Item2.ToString() + "[A-Z]", RegexOptions.IgnoreCase));
 
                     foreach (var kvp in armLabels)
                     {
