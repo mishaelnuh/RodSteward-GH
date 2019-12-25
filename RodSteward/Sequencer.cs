@@ -166,25 +166,19 @@ namespace RodSteward
                 startFloored = model.Vertices.FindIndex(v => v.Z == minZ);
             }
 
-            if (numFloored < 0) { return; }
+            numFloored = Math.Max(0, numFloored);
 
-            if (numFloored >= 0)
+            orderedParts.Add(Tuple.Create('V', startFloored));
+            traversedVertices.Add(startFloored);
+            SearchFromVertex(startFloored, numFloored);
+
+            if (orderedParts.Last().Item1 == 'E')
             {
-                orderedParts.Add(Tuple.Create('V', startFloored));
-                traversedVertices.Add(startFloored);
-                SearchFromVertex(startFloored, numFloored);
+                DA.SetData(0, "Rod: " + String.Format("{0:F2}", model.RodCentrelines[model.Edges[orderedParts.Last().Item2]].GetLength()));
             }
-
-            if (orderedParts.Count() > 0)
+            else
             {
-                if (orderedParts.Last().Item1 == 'E')
-                {
-                    DA.SetData(0, "Rod: " + String.Format("{0:F2}", model.RodCentrelines[model.Edges[orderedParts.Last().Item2]].GetLength()));
-                }
-                else
-                {
-                    DA.SetData(0, "Joint: " + orderedParts.Last().Item2.ToString());
-                }
+                DA.SetData(0, "Joint: " + orderedParts.Last().Item2.ToString());
             }
         }
 
