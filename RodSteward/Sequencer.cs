@@ -216,13 +216,13 @@ namespace RodSteward
                     if (orderedParts.Count() > target)
                         return;
 
-                    var immediateConnextEdges = model.Edges
+                    var immediateConnectEdges = model.Edges
                         .Where(ei => traversedVertices.Contains(ei.Item1) && traversedVertices.Contains(ei.Item2))
                         .Select(ei => model.Edges.IndexOf(ei))
                         .Where(i => !traversedEdges.Contains(i))
                         .ToList();
 
-                    foreach (var ei in immediateConnextEdges)
+                    foreach (var ei in immediateConnectEdges)
                     {
                         orderedParts.Add(Tuple.Create('E', ei));
                         traversedEdges.Add(ei);
