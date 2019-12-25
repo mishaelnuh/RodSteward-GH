@@ -72,6 +72,7 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Sequencer.cs" />
     <Compile Include="Lines2Graph.cs" />
     <Compile Include="Model.cs" />
     <Compile Include="OutputRodCutSVG.cs" />
@@ -114,6 +115,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\svg.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\sequencer.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

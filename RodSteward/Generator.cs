@@ -1,14 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Grasshopper;
 using Grasshopper.Kernel;
 using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Rhino.Geometry;
 using GH_IO.Serialization;
-using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
 
 namespace RodSteward
 {
