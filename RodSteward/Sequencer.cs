@@ -200,13 +200,13 @@ namespace RodSteward
 
             foreach(var e in nextEdgeIndices)
             {
+                var nextVertex = model.Edges[e].Item1 == vertex ? model.Edges[e].Item2 : model.Edges[e].Item1;
+
                 orderedParts.Add(Tuple.Create('E', e));
                 traversedEdges.Add(e);
 
                 if (orderedParts.Count() > target)
                     return;
-
-                var nextVertex = model.Edges[e].Item1 == vertex ? model.Edges[e].Item2 : model.Edges[e].Item1;
 
                 if (!traversedVertices.Contains(nextVertex))
                 {
@@ -215,6 +215,21 @@ namespace RodSteward
 
                     if (orderedParts.Count() > target)
                         return;
+
+                    var immediateConnextEdges = model.Edges
+                        .Where(ei => traversedVertices.Contains(ei.Item1) && traversedVertices.Contains(ei.Item2))
+                        .Select(ei => model.Edges.IndexOf(ei))
+                        .Where(i => !traversedEdges.Contains(i))
+                        .ToList();
+
+                    foreach (var ei in immediateConnextEdges)
+                    {
+                        orderedParts.Add(Tuple.Create('E', ei));
+                        traversedEdges.Add(ei);
+
+                        if (orderedParts.Count() > target)
+                            return;
+                    }
 
                     vertexQueue.Add(nextVertex);
                 }
