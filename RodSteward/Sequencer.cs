@@ -5,6 +5,8 @@ using Grasshopper.Kernel;
 using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using GH_IO.Serialization;
+using Grasshopper.Kernel.Parameters;
+using Grasshopper.Kernel.Types;
 
 namespace RodSteward
 {
@@ -39,6 +41,8 @@ namespace RodSteward
             pManager.AddGenericParameter("Model", "M", "Model object", GH_ParamAccess.item);
             pManager.AddNumberParameter("Starting Joint", "SJ", "First joint to add", GH_ParamAccess.item);
             pManager.AddNumberParameter("Part Number", "PN", "Part number to add", GH_ParamAccess.item);
+
+            ((Param_Number)pManager[1]).PersistentData.Append(new GH_Number(-1));
         }
 
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -156,7 +160,12 @@ namespace RodSteward
             traversedVertices.Clear();
             vertexQueue.Clear();
 
-            if (startFloored < 0 || startFloored >= model.Vertices.Count()) { return; }
+            if (startFloored < 0 || startFloored >= model.Vertices.Count())
+            {
+                var minZ = model.Vertices.Min(v => v.Z);
+                startFloored = model.Vertices.FindIndex(v => v.Z == minZ);
+            }
+
             if (numFloored < 0) { return; }
 
             if (numFloored >= 0)
@@ -196,6 +205,11 @@ namespace RodSteward
                 .Where(e => e.Item1 == vertex || e.Item2 == vertex)
                 .Select(e => model.Edges.IndexOf(e))
                 .Where(i => !traversedEdges.Contains(i))
+                .OrderBy(i =>
+                {
+                    var nextVertex = model.Edges[i].Item1 == vertex ? model.Edges[i].Item2 : model.Edges[i].Item1;
+                    return model.Vertices[nextVertex].Z;
+                })
                 .ToList();
 
             foreach(var e in nextEdgeIndices)
