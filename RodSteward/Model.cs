@@ -9,11 +9,11 @@ namespace RodSteward
 {
     public class Model
     {
-        public int Sides { get; set; } = 50;
-        public double Radius { get; set; } = 6.35;
-        public double JointThickness { get; set; } = 3.0;
-        public double JointLength { get; set; } = 38;
-        public double Tolerance { get; set; } = 0.1;
+        public int Sides { get; set; }
+        public double Radius { get; set; }
+        public double JointThickness { get; set; }
+        public double JointLength { get; set; }
+        public double Tolerance { get; set; }
 
         public double InnerWallRadius { get { return Radius + Tolerance; } }
         public double OuterWallRadius { get { return Radius + JointThickness + Tolerance; } }
