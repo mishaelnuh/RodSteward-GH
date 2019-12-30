@@ -355,12 +355,13 @@ namespace RodSteward
             {
                 try
                 {
-                    var convHullRes = ConvexHull.Create(kvp.Value, Tolerance);
+                    var scaling = Math.Floor(1000 / kvp.Value.SelectMany(p => p).Max());
+                    var convHullRes = ConvexHull.Create(kvp.Value.Select(p => p.Select(pi => pi * scaling).ToArray()).ToList());
                     var hullPoints = convHullRes.Result.Points.ToList();
                     var hullFaces = convHullRes.Result.Faces.ToList();
 
                     var newMesh = new Mesh();
-                    newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0], p.Position[1], p.Position[2])));
+                    newMesh.Vertices.AddVertices(hullPoints.Select(p => new Point3d(p.Position[0] / scaling, p.Position[1] / scaling, p.Position[2] / scaling)));
                     newMesh.Faces.AddFaces(hullFaces.Select(f => new MeshFace(hullPoints.IndexOf(f.Vertices[0]), hullPoints.IndexOf(f.Vertices[1]), hullPoints.IndexOf(f.Vertices[2]))));
                     newMesh.Normals.ComputeNormals();
                     newMesh.UnifyNormals();

@@ -11,7 +11,7 @@ namespace RodSteward
         private string outputMessage = "";
         public OutputJointSTL()
           : base("OutputJointSTL", "RSOutputJointSTL",
-              "Outputs joint mesh STLs to the target directory",
+              "Outputs joint mesh STLs in [mm] to the target directory",
               "RodSteward", "Output")
         {
         }
@@ -58,6 +58,28 @@ namespace RodSteward
             foreach (var file in dirFiles.Where(f => f.Contains("RS_Joint_Mesh_")))
                 File.Delete(file);
 
+            // Get unit scaling
+            var unit = Rhino.RhinoDoc.ActiveDoc.ModelUnitSystem;
+            var scale = 1.0f;
+            switch (unit)
+            {
+                case Rhino.UnitSystem.Millimeters:
+                    scale = 1.0f;
+                    break;
+                case Rhino.UnitSystem.Centimeters:
+                    scale = 10;
+                    break;
+                case Rhino.UnitSystem.Meters:
+                    scale = 1000;
+                    break;
+                case Rhino.UnitSystem.Inches:
+                    scale = 25.4f;
+                    break;
+                case Rhino.UnitSystem.Feet:
+                    scale = 304.8f;
+                    break;
+            }
+
             int fileCounter = 0;
 
             foreach(var kvp in model.JointMeshes)
@@ -67,7 +89,7 @@ namespace RodSteward
 
                 foreach(var m in kvp.Value)
                 {
-                    var vertices = m.Vertices.Select(v => new StlVertex(v.X, v.Y, v.Z)).ToList();
+                    var vertices = m.Vertices.Select(v => new StlVertex(v.X * scale, v.Y * scale, v.Z * scale)).ToList();
                     var faces = m.Faces;
                     var normals = m.FaceNormals.Select(n => new StlNormal(n.X, n.Y, n.Z)).ToList();
 
