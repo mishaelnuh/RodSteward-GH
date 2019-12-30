@@ -18,7 +18,7 @@ namespace RodSteward
 
         public OutputRodCutSVG()
           : base("OutputRodCutSVG", "RSOutputRodCutSVG",
-              "Outputs rod lengths into rod cutting plan as SVG",
+              "Outputs rod lengths into rod cutting plan as SVG in [mm]",
               "RodSteward", "Output")
         {
         }
@@ -108,10 +108,32 @@ namespace RodSteward
             foreach (var file in dirFiles.Where(f => f.Contains("RS_Laser_Cut_Plan")))
                 File.Delete(file);
 
+            // Get unit scaling
+            var unit = Rhino.RhinoDoc.ActiveDoc.ModelUnitSystem;
+            var scale = 1.0f;
+            switch (unit)
+            {
+                case Rhino.UnitSystem.Millimeters:
+                    scale = 1.0f;
+                    break;
+                case Rhino.UnitSystem.Centimeters:
+                    scale = 10;
+                    break;
+                case Rhino.UnitSystem.Meters:
+                    scale = 1000;
+                    break;
+                case Rhino.UnitSystem.Inches:
+                    scale = 25.4f;
+                    break;
+                case Rhino.UnitSystem.Feet:
+                    scale = 304.8f;
+                    break;
+            }
+
             var svgFile = new SvgDocument()
             {
-                Width = new SvgUnit(SvgUnitType.None, (float)(stockLength + DOC_PADDING * 2)),
-                Height = new SvgUnit(SvgUnitType.None, (float)(model.Radius * 2 * binLengths.Count() + ROD_PADDING * (binLengths.Count() - 1) + DOC_PADDING * 2)),
+                Width = new SvgUnit(SvgUnitType.None, (float)(stockLength * scale + DOC_PADDING * 2)),
+                Height = new SvgUnit(SvgUnitType.None, (float)(model.Radius * 2 * binLengths.Count() * scale + ROD_PADDING * (binLengths.Count() - 1) + DOC_PADDING * 2)),
             };
             svgFile.ViewBox = new SvgViewBox(0, 0, svgFile.Width, svgFile.Height);
 
@@ -124,24 +146,24 @@ namespace RodSteward
                     StartX = (float)(offset_x),
                     EndX = (float)(offset_x),
                     StartY = (float)(offset_y),
-                    EndY = (float)(offset_y + model.Radius * 2),
+                    EndY = (float)(offset_y + model.Radius * 2 * scale),
                     Stroke = new SvgColourServer(System.Drawing.Color.Red),
                     StrokeWidth = 2,
                 });
                 foreach (var l in b)
                 {
-                    offset_x += (float)l;
+                    offset_x += (float)l * scale;
                     svgFile.Children.Add(new SvgLine()
                     {
                         StartX = (float)(offset_x),
                         EndX = (float)(offset_x),
                         StartY = (float)(offset_y),
-                        EndY = (float)(offset_y + model.Radius * 2),
+                        EndY = (float)(offset_y + model.Radius * 2 * scale),
                         Stroke = new SvgColourServer(System.Drawing.Color.Red),
                         StrokeWidth = 2,
                     });
                 }
-                offset_y += model.Radius * 2 + ROD_PADDING;
+                offset_y += model.Radius * 2 * scale + ROD_PADDING;
             }
 
             using (FileStream fs = File.Create(Path.Combine(dir, "RS_Laser_Cut_Plan.svg")))
