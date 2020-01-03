@@ -497,7 +497,7 @@ namespace RodSteward
             var style = new Rhino.DocObjects.DimensionStyle();
             style.TextHorizontalAlignment = Rhino.DocObjects.TextHorizontalAlignment.Left;
             style.TextVerticalAlignment = Rhino.DocObjects.TextVerticalAlignment.Middle;
-            style.TextHeight = textHeight;
+            style.TextHeight = 1;
             var prefFont = Rhino.DocObjects.Font.InstalledFonts("Lucida Console");
             if (prefFont.Length > 0)
                 style.Font = prefFont.First();
@@ -511,6 +511,7 @@ namespace RodSteward
                 .Where(b => b != null)
                 .SelectMany(b => Mesh.CreateFromBrep(b.ToBrep(), MeshingParameters.FastRenderMesh));
 
+            var scaleTrans = Transform.Scale(writingPlane, textHeight, textHeight, 1);
             var trans = Transform.PlaneToPlane(writingPlane, plane);
 
             if (meshes.Count() > 0)
@@ -524,6 +525,7 @@ namespace RodSteward
                 mesh.Normals.ComputeNormals();
                 mesh.UnifyNormals();
                 mesh.Normals.ComputeNormals();
+                mesh.Transform(scaleTrans);
                 mesh.Transform(trans);
                 return mesh;
             }
