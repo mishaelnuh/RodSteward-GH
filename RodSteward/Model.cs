@@ -96,43 +96,28 @@ namespace RodSteward
                             var key1 = Tuple.Create(vStart, connectedVertices[vEnd]);
                             var key2 = Tuple.Create(vStart, connectedVertices[vCompare]);
 
-                            // Calculate angle
-                            // Use procedure from: https://people.eecs.berkeley.edu/~wkahan/Triangle.pdf
-                            // to minimize error for small angles
-
                             var vec1 = Vertices[connectedVertices[vEnd]] - Vertices[vStart];
                             var vec2 = Vertices[connectedVertices[vCompare]] - Vertices[vStart];
-                            var vec3 = Vector3d.Subtract(vec1, vec2);
-                            var mag1 = vec1.Length;
-                            var mag2 = vec2.Length;
-                            var mag3 = vec3.Length;
 
-                            if (mag2 > mag1)
-                            {
-                                var t = mag2;
-                                mag2 = mag1;
-                                mag1 = t;
-                            }
+                            var cosAng = (vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z) / (vec1.Length * vec2.Length);
+                            var sinAng = Math.Sqrt(Math.Pow(vec1.Length * vec2.Length, 2) -
+                                Math.Pow(vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z, 2)) / (vec1.Length * vec2.Length);
 
-                            double mu = 0;
-                            if (mag2 >= mag3)
-                                mu = mag3 - (mag1 - mag2);
-                            else
-                                mu = mag2 - (mag1 - mag3);
-
-                            var t1 = ((mag1 - mag2) + mag3) * mu;
-                            var t2 = (mag1 + (mag2 + mag3)) * ((mag1 - mag3) + mag2);
-
-                            double divParam = 0;
                             double offset = 0;
-                            if (Math.Abs(t2) <= 1e-6)
+                            if (Double.IsNaN(sinAng) || sinAng == 0)
+                            {
                                 offset = JointThickness + Tolerance;
+                            }
+                            else if (cosAng <= 0)
+                            {
+                                offset = Math.Max(JointThickness + Tolerance, OuterWallRadius * sinAng);
+                            }
                             else
                             {
-                                divParam = Math.Sqrt(t1 / t2);
-                                var ang = 2 * Math.Atan(divParam);
-                                offset = Math.Max(Math.Max(OuterWallRadius / divParam, OuterWallRadius * Math.Cos(ang - Math.PI/2)),
-                                    JointThickness + Tolerance);
+                                var off = 1 / sinAng * Math.Sqrt(OuterWallRadius * OuterWallRadius + InnerWallRadius * InnerWallRadius +
+                                    2 * OuterWallRadius * InnerWallRadius * cosAng - InnerWallRadius * InnerWallRadius * sinAng * sinAng);
+
+                                offset = Math.Max(JointThickness + Tolerance, off);
                             }
 
                             if (Offsets.ContainsKey(key1))
