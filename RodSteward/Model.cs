@@ -126,11 +126,13 @@ namespace RodSteward
                             double divParam = 0;
                             double offset = 0;
                             if (Math.Abs(t2) <= 1e-6)
-                                offset = OuterWallRadius;
+                                offset = JointThickness + Tolerance;
                             else
                             {
                                 divParam = Math.Sqrt(t1 / t2);
-                                offset = Math.Max(OuterWallRadius / divParam, OuterWallRadius);
+                                var ang = 2 * Math.Atan(divParam);
+                                offset = Math.Max(Math.Max(OuterWallRadius / divParam, OuterWallRadius * Math.Cos(ang - Math.PI/2)),
+                                    JointThickness + Tolerance);
                             }
 
                             if (Offsets.ContainsKey(key1))
