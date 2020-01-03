@@ -303,8 +303,8 @@ namespace RodSteward
 
                 try
                 {
-                    startCurve = c.Trim(CurveEnd.End, len - (Offsets[e] + JointLength + Tolerance));
-                    endCurve = c.Trim(CurveEnd.Start, len - (Offsets[Tuple.Create(e.Item2, e.Item1)] + JointLength + Tolerance));
+                    startCurve = c.Trim(CurveEnd.End, len - (Offsets[e] + JointLength));
+                    endCurve = c.Trim(CurveEnd.Start, len - (Offsets[Tuple.Create(e.Item2, e.Item1)] + JointLength));
 
                     if (startCurve == null || endCurve == null)
                         throw new Exception();
