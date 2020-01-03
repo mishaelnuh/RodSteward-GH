@@ -96,41 +96,28 @@ namespace RodSteward
                             var key1 = Tuple.Create(vStart, connectedVertices[vEnd]);
                             var key2 = Tuple.Create(vStart, connectedVertices[vCompare]);
 
-                            // Calculate angle
-                            // Use procedure from: https://people.eecs.berkeley.edu/~wkahan/Triangle.pdf
-                            // to minimize error for small angles
-
                             var vec1 = Vertices[connectedVertices[vEnd]] - Vertices[vStart];
                             var vec2 = Vertices[connectedVertices[vCompare]] - Vertices[vStart];
-                            var vec3 = Vector3d.Subtract(vec1, vec2);
-                            var mag1 = vec1.Length;
-                            var mag2 = vec2.Length;
-                            var mag3 = vec3.Length;
 
-                            if (mag2 > mag1)
-                            {
-                                var t = mag2;
-                                mag2 = mag1;
-                                mag1 = t;
-                            }
+                            var cosAng = (vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z) / (vec1.Length * vec2.Length);
+                            var sinAng = Math.Sqrt(Math.Pow(vec1.Length * vec2.Length, 2) -
+                                Math.Pow(vec1.X * vec2.X + vec1.Y * vec2.Y + vec1.Z * vec2.Z, 2)) / (vec1.Length * vec2.Length);
 
-                            double mu = 0;
-                            if (mag2 >= mag3)
-                                mu = mag3 - (mag1 - mag2);
-                            else
-                                mu = mag2 - (mag1 - mag3);
-
-                            var t1 = ((mag1 - mag2) + mag3) * mu;
-                            var t2 = (mag1 + (mag2 + mag3)) * ((mag1 - mag3) + mag2);
-
-                            double divParam = 0;
                             double offset = 0;
-                            if (Math.Abs(t2) <= 1e-6)
-                                offset = OuterWallRadius;
+                            if (Double.IsNaN(sinAng) || sinAng == 0)
+                            {
+                                offset = JointThickness + Tolerance;
+                            }
+                            else if (cosAng <= 0)
+                            {
+                                offset = Math.Max(JointThickness + Tolerance, OuterWallRadius * sinAng);
+                            }
                             else
                             {
-                                divParam = Math.Sqrt(t1 / t2);
-                                offset = Math.Max(OuterWallRadius / divParam, OuterWallRadius);
+                                var off = 1 / sinAng * Math.Sqrt(OuterWallRadius * OuterWallRadius + InnerWallRadius * InnerWallRadius +
+                                    2 * OuterWallRadius * InnerWallRadius * cosAng - InnerWallRadius * InnerWallRadius * sinAng * sinAng);
+
+                                offset = Math.Max(JointThickness + Tolerance, off);
                             }
 
                             if (Offsets.ContainsKey(key1))
@@ -303,8 +290,8 @@ namespace RodSteward
 
                 try
                 {
-                    startCurve = c.Trim(CurveEnd.End, len - (Offsets[e] + JointLength + Tolerance));
-                    endCurve = c.Trim(CurveEnd.Start, len - (Offsets[Tuple.Create(e.Item2, e.Item1)] + JointLength + Tolerance));
+                    startCurve = c.Trim(CurveEnd.End, len - (Offsets[e] + JointLength));
+                    endCurve = c.Trim(CurveEnd.Start, len - (Offsets[Tuple.Create(e.Item2, e.Item1)] + JointLength));
 
                     if (startCurve == null || endCurve == null)
                         throw new Exception();
@@ -510,7 +497,7 @@ namespace RodSteward
             var style = new Rhino.DocObjects.DimensionStyle();
             style.TextHorizontalAlignment = Rhino.DocObjects.TextHorizontalAlignment.Left;
             style.TextVerticalAlignment = Rhino.DocObjects.TextVerticalAlignment.Middle;
-            style.TextHeight = textHeight;
+            style.TextHeight = 1;
             var prefFont = Rhino.DocObjects.Font.InstalledFonts("Lucida Console");
             if (prefFont.Length > 0)
                 style.Font = prefFont.First();
@@ -524,6 +511,7 @@ namespace RodSteward
                 .Where(b => b != null)
                 .SelectMany(b => Mesh.CreateFromBrep(b.ToBrep(), MeshingParameters.FastRenderMesh));
 
+            var scaleTrans = Transform.Scale(writingPlane, textHeight, textHeight, 1);
             var trans = Transform.PlaneToPlane(writingPlane, plane);
 
             if (meshes.Count() > 0)
@@ -537,6 +525,7 @@ namespace RodSteward
                 mesh.Normals.ComputeNormals();
                 mesh.UnifyNormals();
                 mesh.Normals.ComputeNormals();
+                mesh.Transform(scaleTrans);
                 mesh.Transform(trans);
                 return mesh;
             }
