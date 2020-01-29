@@ -47,6 +47,9 @@ namespace RodSteward
                 var p1 = l.PointAt(0);
                 var p2 = l.PointAt(1);
 
+                if (p1.DistanceTo(p2) < tolerance)
+                    continue;
+
                 int match1 = vertices.FindIndex(p => p.DistanceTo(p1) < tolerance);
                 int match2 = vertices.FindIndex(p => p.DistanceTo(p2) < tolerance);
 
@@ -61,7 +64,13 @@ namespace RodSteward
                     match2 = vertices.Count() - 1;
                 }
 
-                edges.Add(Tuple.Create(match1, match2));
+                if (match1 != match2)
+                {
+                    var t1 = Tuple.Create(match1, match2);
+                    var t2 = Tuple.Create(match2, match1);
+                    if (!edges.Contains(t1) && !edges.Contains(t2))
+                        edges.Add(t1);
+                }
             }
 
             // Prune
