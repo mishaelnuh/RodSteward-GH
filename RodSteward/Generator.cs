@@ -46,10 +46,10 @@ namespace RodSteward
             pManager.AddNumberParameter("Tolerance", "e", "Tolerance", GH_ParamAccess.item);
 
             ((Param_Number)pManager[2]).PersistentData.Append(new GH_Number(50));
-            ((Param_Number)pManager[3]).PersistentData.Append(new GH_Number(6.35));
-            ((Param_Number)pManager[4]).PersistentData.Append(new GH_Number(3));
-            ((Param_Number)pManager[5]).PersistentData.Append(new GH_Number(38));
-            ((Param_Number)pManager[6]).PersistentData.Append(new GH_Number(0.1));
+            ((Param_Number)pManager[3]).PersistentData.Append(new GH_Number(0.00635));
+            ((Param_Number)pManager[4]).PersistentData.Append(new GH_Number(0.003));
+            ((Param_Number)pManager[5]).PersistentData.Append(new GH_Number(0.038));
+            ((Param_Number)pManager[6]).PersistentData.Append(new GH_Number(0.0001));
         }
 
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -172,7 +172,11 @@ namespace RodSteward
             if (!DA.GetData(5, ref jointLength)) { return; }
             if (!DA.GetData(6, ref tolerance)) { return; }
 
-            if (edges == null || vertices == null) { return; }
+            if (edges == null || vertices == null)
+            {
+                model.ClearModelGeometries();
+                return;
+            }
             if (radius <= 0 || sides <= 2 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
 
             if (ForceRecalc || !(model.Edges.SequenceEqual(edges) &&
@@ -193,7 +197,15 @@ namespace RodSteward
                 model.JointLength = jointLength;
                 model.Tolerance = tolerance;
 
-                model.Generate(PrintLabel);
+                try
+                {
+                    model.Generate(PrintLabel);
+                }
+                catch (Exception ex)
+                {
+                    model.ClearModelGeometries();
+                    throw ex;
+                }
             }
 
             if (Collision)
