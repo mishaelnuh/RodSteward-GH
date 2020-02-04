@@ -172,7 +172,11 @@ namespace RodSteward
             if (!DA.GetData(5, ref jointLength)) { return; }
             if (!DA.GetData(6, ref tolerance)) { return; }
 
-            if (edges == null || vertices == null) { return; }
+            if (edges == null || vertices == null)
+            {
+                model.ClearModelGeometries();
+                return;
+            }
             if (radius <= 0 || sides <= 2 || jointThickness < 0 || jointLength < 0 || tolerance < 0) { throw new Exception("Invalid input."); }
 
             if (ForceRecalc || !(model.Edges.SequenceEqual(edges) &&
@@ -193,7 +197,15 @@ namespace RodSteward
                 model.JointLength = jointLength;
                 model.Tolerance = tolerance;
 
-                model.Generate(PrintLabel);
+                try
+                {
+                    model.Generate(PrintLabel);
+                }
+                catch (Exception ex)
+                {
+                    model.ClearModelGeometries();
+                    throw ex;
+                }
             }
 
             if (Collision)

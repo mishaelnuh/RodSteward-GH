@@ -69,6 +69,13 @@ namespace RodSteward
             GenerateJointMeshes(label);
         }
 
+        public void ClearModelGeometries()
+        {
+            RodMeshes.Clear();
+            RodCentrelines.Clear();
+            JointMeshes.Clear();
+        }
+
         public Dictionary<Tuple<int, int>, double> CalculateRodOffsets()
         {
             Offsets.Clear();
