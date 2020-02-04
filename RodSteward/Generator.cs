@@ -46,10 +46,10 @@ namespace RodSteward
             pManager.AddNumberParameter("Tolerance", "e", "Tolerance", GH_ParamAccess.item);
 
             ((Param_Number)pManager[2]).PersistentData.Append(new GH_Number(50));
-            ((Param_Number)pManager[3]).PersistentData.Append(new GH_Number(6.35));
-            ((Param_Number)pManager[4]).PersistentData.Append(new GH_Number(3));
-            ((Param_Number)pManager[5]).PersistentData.Append(new GH_Number(38));
-            ((Param_Number)pManager[6]).PersistentData.Append(new GH_Number(0.1));
+            ((Param_Number)pManager[3]).PersistentData.Append(new GH_Number(0.00635));
+            ((Param_Number)pManager[4]).PersistentData.Append(new GH_Number(0.003));
+            ((Param_Number)pManager[5]).PersistentData.Append(new GH_Number(0.038));
+            ((Param_Number)pManager[6]).PersistentData.Append(new GH_Number(0.0001));
         }
 
         protected override void RegisterOutputParams(GH_OutputParamManager pManager)
