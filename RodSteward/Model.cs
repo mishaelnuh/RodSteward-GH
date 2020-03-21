@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Grasshopper;
 using MIConvexHull;
+using MathNet.Numerics.LinearAlgebra;
 
 namespace RodSteward
 {
@@ -538,6 +539,179 @@ namespace RodSteward
             }
 
             return null;
+        }
+    
+        public double MemberLengthInMM(int mem)
+        {
+            var p1 = Vertices[Edges[mem].Item1];
+            var p2 = Vertices[Edges[mem].Item2];
+            var line = new Line(p1, p2);
+            var L = line.Length;
+
+            // Get unit scaling
+            var unit = Rhino.RhinoDoc.ActiveDoc.ModelUnitSystem;
+            var scale = 1.0f;
+            switch (unit)
+            {
+                case Rhino.UnitSystem.Millimeters:
+                    scale = 1.0f;
+                    break;
+                case Rhino.UnitSystem.Centimeters:
+                    scale = 10;
+                    break;
+                case Rhino.UnitSystem.Meters:
+                    scale = 1000;
+                    break;
+                case Rhino.UnitSystem.Inches:
+                    scale = 25.4f;
+                    break;
+                case Rhino.UnitSystem.Feet:
+                    scale = 304.8f;
+                    break;
+            }
+
+            return L * scale;
+        }
+
+        public Matrix<double> LocalMemberMatrix(int mem, double E, double A, double Iy, double Iz)
+        {
+            var L = MemberLengthInMM(mem);
+
+            var k = Matrix<double>.Build.DenseOfArray(new double[,]
+            {
+                {E*A/L, 0                    , 0                    , 0                    , 0                   , -E*A/L, 0                     , 0                     , 0                    , 0                    },
+                {0    , 12*E*Iz/Math.Pow(L,3), 0                    , 0                    , 6*E*Iz/Math.Pow(L,2), 0     , -12*E*Iz/Math.Pow(L,3), 0                     , 0                    , 6*E*Iz/Math.Pow(L,2) },
+                {0    , 0                    , 12*E*Iy/Math.Pow(L,3), -6*E*Iy/Math.Pow(L,2), 0                   , 0     , 0                     , -12*E*Iy/Math.Pow(L,3), -6*E*Iy/Math.Pow(L,2), 0                    },
+                {0    , 0                    , 0                    , 4*E*Iy/L             , 0                   , 0     , 0                     , 6*E*Iy/Math.Pow(L,2)  , 2*E*Iy/L             , 0                    },
+                {0    , 0                    , 0                    , 0                    , 4*E*Iz/L            , 0     , -6*E*Iz/Math.Pow(L,2) , 0                     , 0                    , 2*E*Iz/L             },
+                {0    , 0                    , 0                    , 0                    , 0                   , E*A/L , 0                     , 0                     , 0                    , 0                    },
+                {0    , 0                    , 0                    , 0                    , 0                   , 0     , 12*E*Iz/Math.Pow(L,3) , 0                     , 0                    , -6*E*Iz/Math.Pow(L,2)},
+                {0    , 0                    , 0                    , 0                    , 0                   , 0     , 0                     , 12*E*Iy/Math.Pow(L,3) , 6*E*Iy/Math.Pow(L,2) , 0                    },
+                {0    , 0                    , 0                    , 0                    , 0                   , 0     , 0                     , 0                     , 4*E*Iy/L             , 0                    },
+                {0    , 0                    , 0                    , 0                    , 0                   , 0     , 0                     , 0                     , 0                    , 4*E*Iz/L             },
+            });
+
+            for (int i = 0; i < 10; i++)
+                for (int j = i + 1; j < 10; j++)
+                    k[j, i] = k[i, j];
+
+            return k;
+        }
+
+        public Matrix<double> RotationMatrix(int mem)
+        {
+            var p1 = Vertices[Edges[mem].Item1];
+            var p2 = Vertices[Edges[mem].Item2];
+            var line = new Line(p1, p2);
+            var v_x = line.UnitTangent;
+            var v_z = Vector3d.ZAxis;
+            if (v_x.X == 0 && v_x.Y == 0)
+                v_z = Vector3d.XAxis;
+            var v_y = Vector3d.CrossProduct(v_z, v_x);
+            v_z = Vector3d.CrossProduct(v_x, v_y);
+            v_x.Unitize();
+            v_y.Unitize();
+            v_z.Unitize();
+
+            var transRotationMatrix = Matrix<double>.Build.DenseOfArray(new double[,]
+            {
+                {Math.Cos(Vector3d.VectorAngle(Vector3d.XAxis, v_x)), Math.Cos(Vector3d.VectorAngle(Vector3d.YAxis, v_x)), Math.Cos(Vector3d.VectorAngle(Vector3d.ZAxis, v_x))},
+                {Math.Cos(Vector3d.VectorAngle(Vector3d.XAxis, v_y)), Math.Cos(Vector3d.VectorAngle(Vector3d.YAxis, v_y)), Math.Cos(Vector3d.VectorAngle(Vector3d.ZAxis, v_y))},
+                {Math.Cos(Vector3d.VectorAngle(Vector3d.XAxis, v_z)), Math.Cos(Vector3d.VectorAngle(Vector3d.YAxis, v_z)), Math.Cos(Vector3d.VectorAngle(Vector3d.ZAxis, v_z))}
+            });
+
+            var rotRotationMatrix = Matrix<double>.Build.DenseOfArray(new double[,]
+            {
+                {Math.Cos(Vector3d.VectorAngle(Vector3d.YAxis, v_y)), Math.Cos(Vector3d.VectorAngle(Vector3d.ZAxis, v_y))},
+                {Math.Cos(Vector3d.VectorAngle(Vector3d.YAxis, v_z)), Math.Cos(Vector3d.VectorAngle(Vector3d.ZAxis, v_z))}
+            });
+
+            var rotationMatrix = Matrix<double>.Build.Dense(10, 10);
+
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                {
+                    rotationMatrix[i, j] = transRotationMatrix[i, j];
+                    rotationMatrix[i + 5, j + 5] = transRotationMatrix[i, j];
+                }
+
+
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 2; j++)
+                {
+                    rotationMatrix[i + 3, j + 3] = rotRotationMatrix[i, j];
+                    rotationMatrix[i + 8, j + 8] = rotRotationMatrix[i, j];
+                }
+
+            return rotationMatrix;
+        }
+
+        public Matrix<double> GlobalMemberMatrix(int mem, double E, double A, double Iy, double Iz)
+        {
+            var localK = LocalMemberMatrix(mem, E, A, Iy, Iz);
+            var rotM = RotationMatrix(mem);
+
+            return rotM.Transpose() * localK * rotM;
+        }
+
+        public Matrix<double> StiffnessMatrix(double E, double A, double Iy, double Iz)
+        {
+            var globalK = Matrix<double>.Build.Dense(Vertices.Count * 5, Vertices.Count * 5);
+
+            for(int memId = 0; memId < Edges.Count; memId++)
+            {
+                var memK = GlobalMemberMatrix(memId, E, A, Iy, Iz);
+                var idx1 = Edges[memId].Item1;
+                var idx2 = Edges[memId].Item2;
+
+                for (int x = 0; x < 5; x++)
+                    for (int y = 0; y < 5; y++)
+                    {
+                        globalK[idx1 * 5 + x, idx1 * 5 + y] += memK[x, y];
+                        globalK[idx1 * 5 + x, idx2 * 5 + y] += memK[x, y + 5];
+                        globalK[idx2 * 5 + x, idx1 * 5 + y] += memK[x + 5, y];
+                        globalK[idx2 * 5 + x, idx2 * 5 + y] += memK[x + 5, y + 5];
+                    }
+            }
+            return globalK;
+        }
+
+        public List<Tuple<double, double>> MaxMemberStress(Matrix<double> U, double E, double A, double Iy, double Iz, double Sy, double Sz)
+        {
+            var stresses = new List<Tuple<double, double>>();
+
+            for (int memId = 0; memId < Edges.Count; memId++)
+            {
+                var rot = RotationMatrix(memId);
+                var k_loc = LocalMemberMatrix(memId, E, A, Iy, Iz);
+                var u_e = Matrix<double>.Build.Dense(10, 1);
+                var idx1 = Edges[memId].Item1;
+                var idx2 = Edges[memId].Item2;
+                for (int i = 0; i < 5; i++)
+                {
+                    u_e[i, 0] = U[idx1 * 5 + i, 0];
+                    u_e[i + 5, 0] = U[idx2 * 5 + i, 0];
+                }
+                var f_loc = k_loc * rot * u_e;
+
+                var axial_stress = (f_loc[5, 0] - f_loc[0, 0]) / A;
+                var bending_axis_y_1 = Math.Abs(f_loc[3, 0]) / Sy;
+                var bending_axis_y_2 = Math.Abs(f_loc[8, 0]) / Sy;
+                var bending_axis_z_1 = Math.Abs(f_loc[4, 0]) / Sz;
+                var bending_axis_z_2 = Math.Abs(f_loc[9, 0]) / Sz;
+
+                var s = new List<double>()
+                {
+                    axial_stress + bending_axis_y_1 + bending_axis_z_1,
+                    axial_stress - bending_axis_y_1 - bending_axis_z_1,
+                    axial_stress + bending_axis_y_2 + bending_axis_z_2,
+                    axial_stress - bending_axis_y_2 - bending_axis_z_2,
+                };
+
+                stresses.Add(Tuple.Create(s.Min(), s.Max()));
+            }
+
+            return stresses;
         }
     }
 }
