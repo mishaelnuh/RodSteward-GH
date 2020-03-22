@@ -149,7 +149,10 @@ namespace RodSteward
             utilization = memberStresses.Select((s, i) => {
                 var smax = Math.Max(Math.Abs(s.Item1), Math.Abs(s.Item2));
                 var bucklingStrength = Math.PI * Math.PI * E * Math.Min(Iy, Iz) / (Math.Pow(model.MemberLengthInMM(i), 2) * A);
-                return smax / Math.Min(Fu, bucklingStrength);
+                if (s.Item1 < 0)
+                    return smax / Math.Min(Fu, bucklingStrength);
+                else
+                    return smax / Fu;
             }).ToList();
 
             DA.SetDataList(0, memberStresses.Select(s => s.Item1).ToList());
